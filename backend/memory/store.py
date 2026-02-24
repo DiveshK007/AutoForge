@@ -5,7 +5,8 @@ Implements:
 - Short-term memory: Active workflow state
 - Long-term memory: Failure patterns, fix outcomes
 - Skill graph: Reusable remediation strategies
-- Vector store: Repo embeddings for contextual reasoning
+- Semantic memory: Abstract pattern categories for cross-agent knowledge sharing
+- Policy learning: Tracks policy violations and adapts thresholds
 """
 
 import json
@@ -25,7 +26,8 @@ class MemoryStore:
     1. Short-term — Active task context (in-memory)
     2. Long-term — Historical patterns (persistent)
     3. Skill graph — Reusable strategies (derived)
-    4. Vector memory — Semantic search (embeddings)
+    4. Semantic — Abstract pattern categories (cross-agent)
+    5. Policy — Learning from governance decisions
     """
 
     def __init__(self):
@@ -41,17 +43,28 @@ class MemoryStore:
         self._skills: Dict[str, Dict[str, Any]] = {}
         self._skill_success_rates: Dict[str, float] = {}
 
+        # Semantic memory — abstract patterns grouped by category
+        self._semantic_patterns: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+        # Cross-agent knowledge sharing
+        self._shared_knowledge: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+        # Policy learning
+        self._policy_violations: List[Dict[str, Any]] = []
+        self._policy_overrides: List[Dict[str, Any]] = []
+
         # Metrics
         self._recall_count = 0
         self._knowledge_reuse_count = 0
+        self._cross_agent_shares = 0
 
     async def initialize(self):
         """Initialize memory stores."""
-        print("  🧠 Memory store initialized (in-memory mode)")
+        print("  🧠 Memory store initialized (in-memory mode with semantic + policy layers)")
 
     async def shutdown(self):
         """Gracefully shutdown memory stores."""
-        print(f"  🧠 Memory store shutdown. Experiences: {len(self._experiences)}, Skills: {len(self._skills)}")
+        print(f"  🧠 Memory store shutdown. Experiences: {len(self._experiences)}, Skills: {len(self._skills)}, Semantic patterns: {sum(len(v) for v in self._semantic_patterns.values())}")
 
     # ─── Experience Storage ───
 
@@ -81,6 +94,12 @@ class MemoryStore:
         if experience.success and experience.reusable_skill:
             await self._extract_skill(experience)
 
+        # Build semantic abstraction
+        await self._build_semantic_pattern(experience)
+
+        # Share knowledge cross-agent
+        await self._share_knowledge(experience)
+
     async def store_workflow_experience(self, workflow: Workflow):
         """Store a complete workflow as an experience."""
         self._active_contexts[workflow.workflow_id] = {
@@ -89,6 +108,7 @@ class MemoryStore:
             "status": workflow.status.value,
             "duration": workflow.duration_seconds,
             "task_count": len(workflow.tasks),
+            "shared_context_keys": list(workflow.shared_context.keys()),
             "completed_at": workflow.completed_at.isoformat() if workflow.completed_at else None,
         }
 
@@ -104,6 +124,8 @@ class MemoryStore:
         1. Similar failure patterns
         2. Successful fix strategies
         3. Relevant skills
+        4. Semantic patterns
+        5. Cross-agent knowledge
         """
         self._recall_count += 1
         result = {}
@@ -136,6 +158,17 @@ class MemoryStore:
                 sum(1 for o in outcomes if o["success"]) / max(len(outcomes), 1)
             )
 
+        # Semantic pattern recall
+        if event_type:
+            semantic = self._semantic_patterns.get(event_type, [])
+            if semantic:
+                result["semantic_patterns"] = semantic[-5:]
+
+        # Cross-agent shared knowledge
+        shared = self._shared_knowledge.get(agent_type, [])
+        if shared:
+            result["cross_agent_knowledge"] = shared[-5:]
+
         return result
 
     # ─── Skill Management ───
@@ -151,6 +184,7 @@ class MemoryStore:
                 "usage_count": 0,
                 "success_count": 0,
                 "avg_confidence": 0.0,
+                "avg_fix_time": 0.0,
                 "created_at": experience.timestamp.isoformat(),
             }
 
@@ -160,6 +194,10 @@ class MemoryStore:
             skill["success_count"] += 1
         skill["avg_confidence"] = (
             (skill["avg_confidence"] * (skill["usage_count"] - 1) + experience.confidence)
+            / skill["usage_count"]
+        )
+        skill["avg_fix_time"] = (
+            (skill["avg_fix_time"] * (skill["usage_count"] - 1) + experience.fix_time_seconds)
             / skill["usage_count"]
         )
 
@@ -178,8 +216,98 @@ class MemoryStore:
                     "success_rate": self._skill_success_rates.get(key, 0.0),
                     "usage_count": skill["usage_count"],
                     "confidence": skill["avg_confidence"],
+                    "avg_fix_time": skill["avg_fix_time"],
                 })
         return sorted(relevant, key=lambda s: s["success_rate"], reverse=True)[:5]
+
+    # ─── Semantic Memory ───
+
+    async def _build_semantic_pattern(self, experience: AgentExperience):
+        """Abstract an experience into a semantic pattern category."""
+        # Categorize by failure type + action pattern
+        category = experience.failure_type
+        pattern = {
+            "agent": experience.agent_type,
+            "action_pattern": experience.action_taken,
+            "success": experience.success,
+            "abstract_summary": self._abstract_summary(experience.context_summary),
+            "confidence": experience.confidence,
+            "timestamp": experience.timestamp.isoformat(),
+        }
+        self._semantic_patterns[category].append(pattern)
+
+        # Keep only last 50 per category
+        if len(self._semantic_patterns[category]) > 50:
+            self._semantic_patterns[category] = self._semantic_patterns[category][-50:]
+
+    def _abstract_summary(self, summary: str) -> str:
+        """Create an abstract/generalized version of a context summary."""
+        # Simple abstraction: remove specific names, keep patterns
+        abstract = summary
+        # Replace specific package names with placeholders
+        for token in ["numpy", "lodash", "flask", "django", "react"]:
+            if token in abstract.lower():
+                abstract = abstract.replace(token, "<package>")
+                abstract = abstract.replace(token.capitalize(), "<Package>")
+        return abstract[:200]
+
+    # ─── Cross-Agent Knowledge Sharing ───
+
+    async def _share_knowledge(self, experience: AgentExperience):
+        """Share relevant knowledge from one agent to all others."""
+        if not experience.success or not experience.reusable_skill:
+            return
+
+        # Build shareable knowledge item
+        knowledge = {
+            "from_agent": experience.agent_type,
+            "skill": experience.reusable_skill,
+            "context": experience.context_summary[:200],
+            "confidence": experience.confidence,
+            "timestamp": experience.timestamp.isoformat(),
+        }
+
+        # Share with all other agent types
+        agent_types = {"sre", "security", "qa", "review", "docs", "greenops"}
+        for agent in agent_types:
+            if agent != experience.agent_type:
+                self._shared_knowledge[agent].append(knowledge)
+                self._cross_agent_shares += 1
+
+    # ─── Policy Learning ───
+
+    async def record_policy_violation(self, task_action: str, reason: str, agent_type: str):
+        """Record a policy violation for learning."""
+        self._policy_violations.append({
+            "action": task_action,
+            "reason": reason,
+            "agent": agent_type,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    async def record_policy_override(self, task_action: str, approved_by: str):
+        """Record when a human overrides a policy block."""
+        self._policy_overrides.append({
+            "action": task_action,
+            "approved_by": approved_by,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    def get_policy_learning_stats(self) -> Dict[str, Any]:
+        """Get policy learning statistics."""
+        return {
+            "total_violations": len(self._policy_violations),
+            "total_overrides": len(self._policy_overrides),
+            "override_rate": len(self._policy_overrides) / max(len(self._policy_violations), 1),
+            "top_violated_actions": self._get_top_violated_actions(),
+        }
+
+    def _get_top_violated_actions(self) -> List[Dict[str, Any]]:
+        """Get most frequently violated actions."""
+        counts: Dict[str, int] = defaultdict(int)
+        for v in self._policy_violations:
+            counts[v["action"]] += 1
+        return [{"action": a, "count": c} for a, c in sorted(counts.items(), key=lambda x: -x[1])[:5]]
 
     # ─── Query Methods ───
 
@@ -189,11 +317,14 @@ class MemoryStore:
             "total_experiences": len(self._experiences),
             "failure_pattern_types": len(self._failure_patterns),
             "total_skills": len(self._skills),
+            "semantic_pattern_categories": len(self._semantic_patterns),
+            "cross_agent_shares": self._cross_agent_shares,
             "recall_count": self._recall_count,
             "knowledge_reuse_count": self._knowledge_reuse_count,
             "memory_utilization": (
                 self._knowledge_reuse_count / max(self._recall_count, 1)
             ),
+            "policy_violations": len(self._policy_violations),
         }
 
     def get_skills(self) -> List[Dict[str, Any]]:

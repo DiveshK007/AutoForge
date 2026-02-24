@@ -132,3 +132,49 @@ class GitLabTools:
             return {"success": True, "logs": logs}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    async def generate_tests(
+        self,
+        project_id: str,
+        test_files: list,
+        branch: str,
+        commit_message: str = "test: add automated tests by AutoForge QA Agent",
+    ) -> Dict[str, Any]:
+        """Generate and commit test files to a branch."""
+        results = []
+        try:
+            for test_file in test_files:
+                result = await self.edit_file(
+                    project_id,
+                    test_file.get("path", ""),
+                    test_file.get("content", ""),
+                    branch,
+                    commit_message,
+                )
+                results.append(result)
+            return {"success": True, "files_created": len(results), "results": results}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def update_docs(
+        self,
+        project_id: str,
+        doc_files: list,
+        branch: str,
+        commit_message: str = "docs: update documentation by AutoForge Docs Agent",
+    ) -> Dict[str, Any]:
+        """Update documentation files on a branch."""
+        results = []
+        try:
+            for doc in doc_files:
+                result = await self.edit_file(
+                    project_id,
+                    doc.get("path", ""),
+                    doc.get("content", ""),
+                    branch,
+                    commit_message,
+                )
+                results.append(result)
+            return {"success": True, "files_updated": len(results), "results": results}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

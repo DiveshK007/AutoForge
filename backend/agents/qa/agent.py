@@ -2,10 +2,11 @@
 AutoForge QA Agent — Quality Intelligence Unit.
 
 Generates unit tests, validates regression risk,
-and ensures code quality.
+and ensures code quality. Supports DEMO_MODE.
 """
 
 from typing import Any, Dict
+from config import settings
 from agents.base_agent import BaseAgent
 from agents.reasoning_engine import ReasoningEngine
 from models.workflows import AgentTask, Workflow
@@ -44,7 +45,7 @@ class QAAgent(BaseAgent):
 
     async def perceive(self, task: AgentTask, workflow: Workflow) -> Dict[str, Any]:
         """Parse QA context."""
-        return {
+        context = {
             "action": task.action,
             "project_id": task.input_data.get("project_id"),
             "diff": task.input_data.get("diff", ""),
@@ -52,9 +53,30 @@ class QAAgent(BaseAgent):
             "error_logs": task.input_data.get("error_logs", ""),
             "ref": task.input_data.get("ref", "main"),
         }
+        # Consume upstream SRE context
+        shared = task.input_data.get("_shared_context", {})
+        if shared:
+            sre_ctx = shared.get("sre", {})
+            if sre_ctx:
+                context["sre_fix_files"] = sre_ctx.get("files_modified", [])
+                context["sre_summary"] = sre_ctx.get("summary", "")
+        return context
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze code changes for test requirements."""
+        if settings.DEMO_MODE:
+            return {
+                "analysis": {
+                    "test_targets": ["data_processor.py", "analytics.py"],
+                    "edge_cases": ["Empty input arrays", "Missing numpy at import time", "Very large matrices"],
+                    "regression_risks": ["Removing numpy breaks 3 test files"],
+                    "test_framework": "pytest",
+                    "coverage_gap_score": 0.35,
+                },
+                "confidence": 0.82,
+                "risk_score": 0.25,
+            }
+
         result = await self.reasoning_engine.reason(
             system_prompt=QA_SYSTEM_PROMPT,
             context=f"""Analyze these code changes for testing needs:
@@ -103,7 +125,17 @@ Identify:
         """Generate tests."""
         tools_used = []
 
-        test_result = await self.reasoning_engine.reason(
+        if settings.DEMO_MODE:
+            test_result = {
+                "test_files": [
+                    {"path": "tests/test_dependency_check.py", "content": "# Auto-generated dependency validation test\nimport pytest\n\ndef test_numpy_importable():\n    import numpy\n    assert numpy.__version__\n"},
+                    {"path": "tests/test_data_processor_edge.py", "content": "# Edge case tests for data processor\nimport pytest\nimport numpy as np\n\ndef test_empty_array():\n    assert np.array([]).size == 0\n\ndef test_large_matrix():\n    m = np.zeros((1000,1000))\n    assert m.shape == (1000,1000)\n"},
+                ],
+                "test_count": 3,
+                "coverage_improvement": "+12% estimated coverage improvement",
+            }
+        else:
+            test_result = await self.reasoning_engine.reason(
             system_prompt=QA_SYSTEM_PROMPT,
             context=f"""Generate unit tests for these targets:
 
@@ -155,6 +187,14 @@ Generate complete, runnable test code.""",
 
     async def reflect(self, result: Dict[str, Any], plan: Dict[str, Any]) -> Dict[str, Any]:
         """Reflect on test generation."""
+        if settings.DEMO_MODE:
+            return {
+                "success": True,
+                "outcome": result.get("summary", "Tests generated"),
+                "confidence": 0.82,
+                "extracted_skill": "test_generation_for_dependency_issues",
+                "lesson_learned": "Always add import validation tests when dependencies change",
+            }
         return await self.reasoning_engine.reflect(
             system_prompt=QA_SYSTEM_PROMPT,
             action_taken="generate_tests",

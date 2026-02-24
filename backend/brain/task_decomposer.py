@@ -1,30 +1,58 @@
 """
-AutoForge Task Decomposer — Breaks events into agent-assignable tasks.
+AutoForge Task Decomposer — Breaks events into agent-assignable tasks with DAG dependencies.
 """
 
-from typing import List
+from typing import Dict, List
 
 from models.events import NormalizedEvent, EventType
 from models.workflows import AgentTask, TaskPriority
 from brain.router import AgentRouter
 
 
+# ─── Dependency Graph: which agent types must complete before others can start ──
+AGENT_DEPENDENCY_MAP: Dict[str, Dict[str, List[str]]] = {
+    EventType.PIPELINE_FAILURE.value: {
+        "sre": [],                        # SRE runs first — diagnoses
+        "security": ["sre"],              # Security validates SRE's fix
+        "qa": ["sre"],                    # QA generates tests for fix
+        "docs": ["sre"],                  # Docs updates changelog after fix
+        "greenops": [],                   # GreenOps runs independently
+    },
+    EventType.SECURITY_ALERT.value: {
+        "security": [],                   # Security leads
+        "sre": ["security"],              # SRE assesses impact after analysis
+        "qa": ["security"],               # QA validates patch
+    },
+    EventType.MERGE_REQUEST_OPENED.value: {
+        "review": [],                     # Review runs first
+        "security": [],                   # Security scans independently
+        "qa": ["review"],                 # QA acts on review findings
+    },
+    EventType.MERGE_REQUEST_MERGED.value: {
+        "docs": [],
+        "greenops": [],
+    },
+}
+
+
 class TaskDecomposer:
     """
-    Decomposes normalized events into structured agent tasks.
+    Decomposes normalized events into structured agent tasks with DAG dependencies.
 
     Implements the cognitive pipeline:
-    Event → Context Analysis → Task Generation → Priority Assignment
+    Event → Context Analysis → Task Generation → Dependency Wiring → Priority Assignment
     """
 
     def __init__(self):
         self.router = AgentRouter()
 
     def decompose(self, event: NormalizedEvent) -> List[AgentTask]:
-        """Decompose an event into a list of agent tasks."""
+        """Decompose an event into a DAG of agent tasks."""
         agents = self.router.get_agents_for_event(event.event_type.value)
         tasks = []
+        task_id_map: Dict[str, str] = {}  # agent_type → task_id
 
+        # First pass: create all tasks and record their IDs
         for agent_type in agents:
             action = self.router.get_action_for_agent(event.event_type.value, agent_type)
             priority = self._determine_priority(event, agent_type)
@@ -37,15 +65,26 @@ class TaskDecomposer:
                 input_data=self._build_task_input(event, agent_type),
             )
             tasks.append(task)
+            task_id_map[agent_type] = task.task_id
 
-        # Sort by priority
+        # Second pass: wire up dependencies from the DAG map
+        dep_map = AGENT_DEPENDENCY_MAP.get(event.event_type.value, {})
+        for task in tasks:
+            agent_deps = dep_map.get(task.agent_type, [])
+            task.dependencies = [
+                task_id_map[dep_agent]
+                for dep_agent in agent_deps
+                if dep_agent in task_id_map
+            ]
+
+        # Sort: tasks with no dependencies first, then by priority
         priority_order = {
             TaskPriority.CRITICAL: 0,
             TaskPriority.HIGH: 1,
             TaskPriority.MEDIUM: 2,
             TaskPriority.LOW: 3,
         }
-        tasks.sort(key=lambda t: priority_order.get(t.priority, 99))
+        tasks.sort(key=lambda t: (len(t.dependencies), priority_order.get(t.priority, 99)))
 
         return tasks
 

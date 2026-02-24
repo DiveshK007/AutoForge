@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     SECRET_KEY: str = "dev-secret-key-change-in-production"
     LOG_LEVEL: str = "INFO"
+    DEMO_MODE: bool = True  # Deterministic demo mode — precomputed reasoning, no LLM calls
 
     # ─── Agent Configuration ───
     AGENT_MAX_RETRIES: int = 3

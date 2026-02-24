@@ -254,17 +254,25 @@ class TelemetryCollector:
 
     async def calculate_meta_intelligence(self) -> float:
         """
-        Calculate the Meta Intelligence Score.
+        Calculate the Meta Intelligence Score (MIS).
 
-        Formula: (Accuracy + Learning + Reflection + Collaboration) / 4
+        Formula: (Accuracy×0.3 + Learning×0.25 + Reflection×0.2 + Collaboration×0.15 + Sustainability×0.1)
+        Weighted to emphasize the competition's judging criteria.
         """
         total = self._completed_workflows + self._failed_workflows
         accuracy = self._completed_workflows / max(total, 1)
         learning = self._calculate_learning_score()
-        reflection = self._self_corrections / max(self._failed_first_attempts or 1, 1)
+        reflection = min(self._self_corrections / max(self._failed_first_attempts or 1, 1), 1.0)
         collaboration = self._multi_agent_workflows / max(self._total_workflows, 1)
+        sustainability = self._calculate_carbon_score() / 100.0  # Normalize to 0-1
 
-        meta_score = (accuracy + learning + min(reflection, 1.0) + collaboration) / 4
+        meta_score = (
+            accuracy * 0.30
+            + learning * 0.25
+            + reflection * 0.20
+            + collaboration * 0.15
+            + sustainability * 0.10
+        )
         return round(meta_score, 4)
 
     # ─── Internal Calculations ───

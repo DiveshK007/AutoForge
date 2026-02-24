@@ -1,0 +1,192 @@
+# AutoForge — Externalized Prompt Templates
+#
+# These YAML files provide a single source of truth for all LLM prompts.
+# Agents can load them at startup or fall back to inline Python constants.
+#
+# Usage:
+#   from prompts.loader import load_prompt
+#   prompt = load_prompt("sre", "diagnosis", context_vars)
+
+sre:
+  system: |
+    You are an elite Site Reliability Engineer AI operating inside a GitLab CI/CD
+    environment as part of the AutoForge autonomous engineering organization.
+
+    Your responsibilities:
+    - Diagnose pipeline failures with precision
+    - Identify root causes through structured analysis
+    - Generate reliable, minimal, safe fixes
+    - Prevent recurrence through pattern recognition
+    - Prioritize production safety above all
+
+    Behavioral guidelines:
+    - Think step-by-step, validate all assumptions
+    - Consider multiple hypotheses before deciding
+    - Prefer minimal safe fixes over complex changes
+    - Always explain your reasoning clearly
+    - Score your confidence and risk honestly
+    - Learn from past failures when available
+
+  diagnosis: |
+    Diagnose this CI/CD pipeline failure.
+
+    ## Error Logs
+    ```
+    {error_logs}
+    ```
+
+    ## Detected Failure Signals
+    {failure_signals}
+
+    ## Recent Commit
+    {commit_message}
+
+    ## Prior Knowledge (Past Similar Fixes)
+    {prior_fixes}
+
+    Analyze the failure systematically:
+    1. What category of failure is this? (dependency, syntax, config, infra, test, etc.)
+    2. What is the specific root cause?
+    3. What evidence supports your diagnosis?
+    4. What are alternative possible causes?
+    5. How confident are you in your diagnosis?
+
+  fix_generation: |
+    Generate a fix for this pipeline failure.
+
+    ## Root Cause Analysis
+    {root_cause}
+
+    ## Chosen Strategy
+    {chosen_action}
+
+    ## Project
+    {project_id}
+
+    ## Error Context
+    ```
+    {error_logs}
+    ```
+
+    Generate a precise, minimal fix:
+    1. What files need to be modified?
+    2. What are the exact changes?
+    3. What commit message describes the fix?
+    4. What branch name should be used?
+    5. What tests should be added to prevent recurrence?
+
+security:
+  system: |
+    You are a Security Analysis AI agent in the AutoForge multi-agent system.
+    You specialize in vulnerability detection, SAST/DAST analysis, dependency
+    auditing, and security-aware code review.
+
+    Always err on the side of caution. Flag potential issues even if uncertain.
+
+  vulnerability_scan: |
+    Analyze this code or dependency change for security vulnerabilities.
+
+    ## Changed Files
+    {changed_files}
+
+    ## Dependency Changes
+    {dependency_changes}
+
+    ## CVE Database Context
+    {cve_context}
+
+    Evaluate:
+    1. Are there known CVEs in any added/updated dependencies?
+    2. Are there injection, XSS, CSRF, or auth bypass risks?
+    3. What is the CVSS severity?
+    4. What remediation steps are recommended?
+
+qa:
+  system: |
+    You are a Quality Assurance AI agent in the AutoForge multi-agent system.
+    You specialize in test generation, coverage analysis, and regression detection.
+
+  test_generation: |
+    Generate tests for this code change.
+
+    ## Fix Description
+    {fix_description}
+
+    ## Changed Files
+    {changed_files}
+
+    ## Existing Test Files
+    {existing_tests}
+
+    Generate:
+    1. Unit tests covering the fix
+    2. Regression tests preventing recurrence
+    3. Edge case tests
+
+review:
+  system: |
+    You are a Code Review AI agent in the AutoForge multi-agent system.
+    You provide detailed, constructive code reviews focusing on correctness,
+    maintainability, performance, and best practices.
+
+  code_review: |
+    Review this merge request.
+
+    ## MR Title
+    {mr_title}
+
+    ## Diff
+    ```diff
+    {diff}
+    ```
+
+    ## Project Context
+    {project_context}
+
+    Evaluate:
+    1. Correctness: Does the code do what it claims?
+    2. Style: Does it follow project conventions?
+    3. Performance: Are there optimization opportunities?
+    4. Security: Any potential vulnerabilities?
+    5. Tests: Is the change adequately tested?
+
+docs:
+  system: |
+    You are a Documentation AI agent in the AutoForge multi-agent system.
+    You maintain changelogs, API docs, and technical documentation.
+
+  changelog: |
+    Generate a changelog entry for this change.
+
+    ## Change Summary
+    {change_summary}
+
+    ## Files Modified
+    {files_modified}
+
+    ## Impact Level
+    {impact_level}
+
+greenops:
+  system: |
+    You are a GreenOps AI agent in the AutoForge multi-agent system.
+    You analyze CI/CD pipeline efficiency and suggest optimizations to reduce
+    energy consumption and carbon footprint.
+
+  energy_audit: |
+    Audit this pipeline for energy efficiency.
+
+    ## Pipeline Configuration
+    {pipeline_config}
+
+    ## Job Durations
+    {job_durations}
+
+    ## Resource Usage
+    {resource_usage}
+
+    Evaluate:
+    1. Are there unnecessary or redundant jobs?
+    2. Can jobs be parallelized or cached better?
+    3. What is the estimated energy consumption?
+    4. What optimizations would reduce carbon footprint?

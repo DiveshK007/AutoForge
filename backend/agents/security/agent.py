@@ -3,11 +3,13 @@ AutoForge Security Agent — DevSecOps Specialist.
 
 Detects vulnerable dependencies, generates patches,
 assesses exploit risk, and creates secure MRs.
+Supports DEMO_MODE for deterministic reasoning.
 """
 
 from typing import Any, Dict, List
 from uuid import uuid4
 
+from config import settings
 from agents.base_agent import BaseAgent
 from agents.reasoning_engine import ReasoningEngine
 from models.workflows import AgentTask, Workflow
@@ -72,6 +74,15 @@ class SecurityAgent(BaseAgent):
             "action": task.action,
         }
 
+        # Consume shared context from upstream agents (e.g., SRE's fix)
+        shared = input_data.get("_shared_context", {})
+        if shared:
+            context["upstream_analysis"] = shared
+            sre_ctx = shared.get("sre", {})
+            if sre_ctx:
+                context["sre_fix_files"] = sre_ctx.get("files_modified", [])
+                context["sre_root_cause"] = sre_ctx.get("root_cause", "")
+
         workflow.add_timeline_entry(
             "security_perception",
             agent="security",
@@ -86,6 +97,22 @@ class SecurityAgent(BaseAgent):
 
         if action == "validate_fix_security":
             return await self._reason_fix_validation(context, prior_knowledge)
+
+        # ─── DEMO MODE ───
+        if settings.DEMO_MODE:
+            from demo.engine import get_demo_scenario
+            scenario = get_demo_scenario("security_vulnerability") or {}
+            hypotheses = scenario.get("hypotheses", [])
+            confidence = scenario.get("confidence", 0.85)
+            risk_score = scenario.get("risk_score", 0.15)
+            return {
+                "analysis": {"recommendation": scenario.get("root_cause", "Security patch required")},
+                "confidence": confidence,
+                "risk_score": risk_score,
+                "severity": context.get("severity"),
+                "patch_strategy": "update_dependency",
+                "hypotheses": hypotheses,
+            }
 
         reason_context = f"""Security Alert Analysis:
 
@@ -132,6 +159,15 @@ Analyze:
 
     async def _reason_fix_validation(self, context: Dict, prior: Dict) -> Dict[str, Any]:
         """Validate that a proposed fix doesn't introduce security issues."""
+        # ─── DEMO MODE ───
+        if settings.DEMO_MODE:
+            return {
+                "analysis": {"recommendation": "Fix validated — no new vulnerabilities introduced"},
+                "confidence": 0.88,
+                "risk_score": 0.12,
+                "validation_passed": True,
+            }
+
         result = await self.reasoning_engine.reason(
             system_prompt=SECURITY_SYSTEM_PROMPT,
             context=f"""Validate the security implications of this pipeline fix.
@@ -234,6 +270,12 @@ Provide files_to_modify with exact changes.""",
 
     async def reflect(self, result: Dict[str, Any], plan: Dict[str, Any]) -> Dict[str, Any]:
         """Reflect on security patch."""
+        if settings.DEMO_MODE:
+            from demo.engine import get_demo_reflection
+            reflection = get_demo_reflection("security_vulnerability")
+            if reflection:
+                return reflection
+
         return await self.reasoning_engine.reflect(
             system_prompt=SECURITY_SYSTEM_PROMPT,
             action_taken=plan.get("chosen_action", "security patch"),

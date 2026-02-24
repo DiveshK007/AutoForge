@@ -4,6 +4,8 @@ AutoForge Dashboard API — Aggregated data endpoints for frontend.
 
 from fastapi import APIRouter, Request
 
+from config import settings
+
 router = APIRouter()
 
 
@@ -16,6 +18,7 @@ async def get_dashboard_overview(request: Request):
 
     agents = brain.get_agent_registry()
     metrics = await telemetry.get_current_metrics()
+    memory_stats = memory.get_stats()
     recent_workflows = brain.get_workflows(limit=5)
 
     agent_statuses = []
@@ -31,6 +34,7 @@ async def get_dashboard_overview(request: Request):
 
     return {
         "system_status": "operational",
+        "demo_mode": settings.DEMO_MODE,
         "agents": agent_statuses,
         "metrics": {
             "success_rate": metrics.get("success_rate", 0.0),
@@ -39,6 +43,16 @@ async def get_dashboard_overview(request: Request):
             "active_workflows": metrics.get("active_workflows", 0),
             "learning_score": metrics.get("learning_score", 0.0),
             "carbon_efficiency": metrics.get("carbon_score", 0.0),
+            "collaboration_index": metrics.get("collaboration_index", 0.0),
+            "reasoning_depth": metrics.get("reasoning_depth", 0.0),
+            "self_correction_rate": metrics.get("self_correction_rate", 0.0),
+        },
+        "memory": {
+            "total_experiences": memory_stats.get("total_experiences", 0),
+            "total_skills": memory_stats.get("total_skills", 0),
+            "semantic_patterns": memory_stats.get("semantic_pattern_categories", 0),
+            "cross_agent_shares": memory_stats.get("cross_agent_shares", 0),
+            "memory_utilization": memory_stats.get("memory_utilization", 0.0),
         },
         "recent_workflows": [w.to_summary() for w in recent_workflows],
         "meta_intelligence_score": await telemetry.calculate_meta_intelligence(),
@@ -70,4 +84,20 @@ async def get_workflow_reasoning(workflow_id: str, request: Request):
         "edges": workflow.get_reasoning_edges(),
         "decision_path": workflow.get_decision_path(),
         "confidence_scores": workflow.get_confidence_scores(),
+        "shared_context": workflow.shared_context,
     }
+
+
+@router.get("/demo-mode")
+async def get_demo_mode():
+    """Check if demo mode is active."""
+    return {"demo_mode": settings.DEMO_MODE}
+
+
+@router.post("/demo-mode")
+async def toggle_demo_mode(request: Request):
+    """Toggle demo mode at runtime."""
+    body = await request.json()
+    new_val = body.get("enabled", not settings.DEMO_MODE)
+    settings.DEMO_MODE = new_val
+    return {"demo_mode": settings.DEMO_MODE}

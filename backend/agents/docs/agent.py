@@ -2,9 +2,11 @@
 AutoForge Documentation Agent — Technical Writer Intelligence.
 
 Updates changelogs, generates API docs, and maintains README files.
+Supports DEMO_MODE.
 """
 
 from typing import Any, Dict
+from config import settings
 from agents.base_agent import BaseAgent
 from agents.reasoning_engine import ReasoningEngine
 from models.workflows import AgentTask, Workflow
@@ -51,6 +53,18 @@ class DocsAgent(BaseAgent):
         }
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
+        if settings.DEMO_MODE:
+            return {
+                "analysis": {
+                    "docs_needed": ["changelog", "readme"],
+                    "changelog_entry": "### Fixed\n- Re-added numpy dependency removed during cleanup refactor\n- Pipeline now passes all 24 tests",
+                    "readme_updates": "Updated dependency list in README",
+                    "confidence": 0.90,
+                },
+                "confidence": 0.90,
+                "risk_score": 0.05,
+            }
+
         result = await self.reasoning_engine.reason(
             system_prompt=DOCS_SYSTEM_PROMPT,
             context=f"""Determine documentation updates needed:
@@ -92,8 +106,16 @@ What documentation should be updated?""",
         tools_used = []
         outputs = {}
 
-        # Generate documentation content
-        doc_result = await self.reasoning_engine.reason(
+        if settings.DEMO_MODE:
+            doc_result = {
+                "files_to_update": [
+                    {"path": "CHANGELOG.md", "content": plan.get("changelog_entry", "")},
+                ],
+                "summary": "Updated CHANGELOG.md with fix entry",
+            }
+        else:
+            # Generate documentation content
+            doc_result = await self.reasoning_engine.reason(
             system_prompt=DOCS_SYSTEM_PROMPT,
             context=f"""Generate documentation updates:
 

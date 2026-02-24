@@ -3,19 +3,22 @@ AutoForge Command Brain — Central Orchestrator.
 
 The Command Brain is the AI Engineering Manager that:
 - Ingests GitLab events
-- Decomposes tasks
-- Routes to specialized agents
+- Decomposes tasks into a DAG
+- Routes to specialized agents with dependency ordering
+- Manages shared context bus between agents
 - Tracks workflow state
 - Resolves conflicts
 - Aggregates outputs
 - Triggers learning loops
+- Supports DEMO_MODE for deterministic presentations
 """
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 from uuid import uuid4
 
+from config import settings
 from models.events import NormalizedEvent, EventType
 from models.workflows import (
     Workflow,
@@ -68,7 +71,8 @@ class CommandBrain:
             "greenops": GreenOpsAgent(),
         }
 
-        print(f"  🤖 Initialized {len(self._agents)} agents: {list(self._agents.keys())}")
+        mode = "DEMO" if settings.DEMO_MODE else "LIVE"
+        print(f"  🤖 Initialized {len(self._agents)} agents: {list(self._agents.keys())} [{mode} mode]")
 
     def set_memory(self, memory):
         """Inject memory store dependency."""
@@ -90,11 +94,10 @@ class CommandBrain:
 
         Flow:
         1. Create workflow
-        2. Decompose into tasks
+        2. Decompose into DAG of tasks
         3. Check policies
-        4. Route to agents
-        5. Execute tasks
-        6. Validate & reflect
+        4. Execute in dependency order (sharing context)
+        5. Validate & reflect
         """
         # Create workflow
         workflow = Workflow(
@@ -123,14 +126,25 @@ class CommandBrain:
         return workflow.workflow_id
 
     async def _process_workflow(self, workflow: Workflow, event: NormalizedEvent):
-        """Process a workflow through the full agent pipeline."""
+        """Process a workflow through the full agent pipeline with DAG execution."""
         try:
-            # ─── Phase 1: Task Decomposition ───
+            # ─── Phase 1: Task Decomposition (with DAG) ───
             workflow.status = WorkflowStatus.ANALYZING
-            workflow.add_timeline_entry("decomposition_started", detail="Analyzing event and creating tasks")
+            workflow.add_timeline_entry("decomposition_started", detail="Analyzing event and creating task DAG")
 
             tasks = self.decomposer.decompose(event)
             workflow.tasks = tasks
+
+            # Build task lookup for dependency resolution
+            task_map: Dict[str, AgentTask] = {t.task_id: t for t in tasks}
+            dep_info = ", ".join(
+                f"{t.agent_type}(deps={[task_map[d].agent_type for d in t.dependencies if d in task_map]})"
+                for t in tasks
+            )
+            workflow.add_timeline_entry(
+                "dag_constructed",
+                detail=f"Task DAG: {dep_info}",
+            )
 
             # ─── Phase 2: Policy Check ───
             for task in tasks:
@@ -146,77 +160,108 @@ class CommandBrain:
             # ─── Phase 3: Conflict Resolution ───
             tasks = self.conflict_resolver.resolve(tasks)
 
-            # ─── Phase 4: Execute Tasks ───
+            # ─── Phase 4: DAG-Ordered Execution with Shared Context ───
             workflow.status = WorkflowStatus.EXECUTING
-            workflow.add_timeline_entry("execution_started", detail=f"Executing {len(tasks)} tasks")
+            active_count = sum(1 for t in tasks if t.status != TaskStatus.SKIPPED)
+            workflow.add_timeline_entry("execution_started", detail=f"Executing {active_count} tasks in DAG order")
 
-            for task in tasks:
-                if task.status == TaskStatus.SKIPPED:
-                    continue
+            completed_task_ids: Set[str] = set()
 
-                agent = self._agents.get(task.agent_type)
-                if not agent:
-                    task.status = TaskStatus.FAILED
-                    task.error = f"Agent {task.agent_type} not found"
-                    continue
+            # Execute in waves: tasks whose dependencies are all satisfied
+            max_waves = 10  # safety limit
+            for wave in range(max_waves):
+                # Find tasks ready to run (all deps satisfied, not yet started)
+                ready = [
+                    t for t in tasks
+                    if t.status == TaskStatus.QUEUED
+                    and all(d in completed_task_ids for d in t.dependencies)
+                ]
 
-                workflow.agents_involved.append(task.agent_type)
+                if not ready:
+                    break  # No more tasks to run
+
                 workflow.add_timeline_entry(
-                    "task_assigned",
-                    agent=task.agent_type,
-                    detail=f"Action: {task.action}",
+                    "execution_wave",
+                    detail=f"Wave {wave + 1}: executing {[t.agent_type for t in ready]}",
                 )
 
-                # Execute agent task
-                try:
-                    result = await agent.execute(task, workflow)
-                    task.status = TaskStatus.COMPLETED
-                    task.output_data = result.get("output", {})
-                    task.reasoning = result.get("reasoning", {})
-                    task.confidence = result.get("confidence", 0.0)
-                    task.risk_score = result.get("risk_score", 0.0)
-                    task.completed_at = datetime.now(timezone.utc)
+                # Execute ready tasks (could parallelize with asyncio.gather for independent ones)
+                for task in ready:
+                    agent = self._agents.get(task.agent_type)
+                    if not agent:
+                        task.status = TaskStatus.FAILED
+                        task.error = f"Agent {task.agent_type} not found"
+                        completed_task_ids.add(task.task_id)
+                        continue
 
-                    # Add reasoning to workflow chain
-                    workflow.reasoning_chain.append({
-                        "step": f"{task.agent_type}_{task.action}",
-                        "type": "agent_execution",
-                        "agent": task.agent_type,
-                        "decision": result.get("decision", ""),
-                        "confidence": task.confidence,
-                        "risk": task.risk_score,
-                        "detail": result.get("summary", ""),
-                    })
+                    # Inject shared context from upstream agents into task input
+                    if workflow.shared_context:
+                        task.input_data["_shared_context"] = workflow.consume_context()
+
+                    if task.agent_type not in workflow.agents_involved:
+                        workflow.agents_involved.append(task.agent_type)
 
                     workflow.add_timeline_entry(
-                        "task_completed",
+                        "task_assigned",
                         agent=task.agent_type,
-                        detail=result.get("summary", "Task completed"),
-                        confidence=task.confidence,
+                        detail=f"Action: {task.action}" + (f" (depends on {[task_map[d].agent_type for d in task.dependencies if d in task_map]})" if task.dependencies else ""),
                     )
 
-                except Exception as e:
-                    task.status = TaskStatus.FAILED
-                    task.error = str(e)
-                    task.completed_at = datetime.now(timezone.utc)
+                    # Execute agent task
+                    try:
+                        result = await agent.execute(task, workflow)
+                        task.status = TaskStatus.COMPLETED
+                        task.output_data = result.get("output", {})
+                        task.reasoning = result.get("reasoning", {})
+                        task.confidence = result.get("confidence", 0.0)
+                        task.risk_score = result.get("risk_score", 0.0)
+                        task.completed_at = datetime.now(timezone.utc)
 
-                    workflow.add_timeline_entry(
-                        "task_failed",
-                        agent=task.agent_type,
-                        detail=str(e),
-                    )
+                        # Publish results to shared context bus
+                        workflow.publish_context(task.agent_type, "result", result)
+                        workflow.publish_context(task.agent_type, "confidence", task.confidence)
+                        workflow.publish_context(task.agent_type, "decision", result.get("decision", ""))
+                        workflow.publish_context(task.agent_type, "summary", result.get("summary", ""))
 
-                    # ─── Self-correction attempt ───
-                    if task.agent_type == "sre" and self._should_retry(task):
+                        # Add reasoning to workflow chain
+                        workflow.reasoning_chain.append({
+                            "step": f"{task.agent_type}_{task.action}",
+                            "type": "agent_execution",
+                            "agent": task.agent_type,
+                            "decision": result.get("decision", ""),
+                            "confidence": task.confidence,
+                            "risk": task.risk_score,
+                            "detail": result.get("summary", ""),
+                            "wave": wave + 1,
+                            "dependencies": task.dependencies,
+                        })
+
                         workflow.add_timeline_entry(
-                            "self_correction",
+                            "task_completed",
                             agent=task.agent_type,
-                            detail="Attempting alternate strategy",
+                            detail=result.get("summary", "Task completed"),
+                            confidence=task.confidence,
                         )
-                        retry_result = await agent.retry_with_reflection(task, workflow, str(e))
-                        if retry_result.get("success"):
-                            task.status = TaskStatus.COMPLETED
-                            task.output_data = retry_result.get("output", {})
+
+                    except Exception as e:
+                        task.status = TaskStatus.FAILED
+                        task.error = str(e)
+                        task.completed_at = datetime.now(timezone.utc)
+
+                        workflow.add_timeline_entry(
+                            "task_failed",
+                            agent=task.agent_type,
+                            detail=str(e),
+                        )
+
+                        # ─── Self-correction: retry → alternate fix → escalate ───
+                        retried = await self._retry_with_escalation(agent, task, workflow)
+                        if retried:
+                            # Publish corrected results to shared context
+                            workflow.publish_context(task.agent_type, "self_corrected", True)
+                            workflow.publish_context(task.agent_type, "confidence", task.confidence)
+
+                    completed_task_ids.add(task.task_id)
 
             # ─── Phase 5: Validation ───
             workflow.status = WorkflowStatus.VALIDATING
@@ -234,7 +279,7 @@ class CommandBrain:
             workflow.completed_at = datetime.now(timezone.utc)
             workflow.add_timeline_entry(
                 "workflow_completed",
-                detail=f"Status: {workflow.status.value}, Duration: {workflow.duration_seconds:.1f}s",
+                detail=f"Status: {workflow.status.value}, Duration: {workflow.duration_seconds:.1f}s, Agents: {workflow.agents_involved}",
             )
 
             # ─── Phase 8: Memory Encoding ───
@@ -250,24 +295,94 @@ class CommandBrain:
             workflow.completed_at = datetime.now(timezone.utc)
             workflow.add_timeline_entry("workflow_error", detail=str(e))
 
+    async def _retry_with_escalation(
+        self, agent, task: AgentTask, workflow: Workflow
+    ) -> bool:
+        """
+        Retry strategy with escalation: retry → alternate fix → manual review.
+        Returns True if self-correction succeeded.
+        """
+        max_retries = settings.AGENT_MAX_RETRIES
+        if not self._should_retry(task) or max_retries < 1:
+            return False
+
+        for attempt in range(1, max_retries + 1):
+            workflow.add_timeline_entry(
+                "self_correction",
+                agent=task.agent_type,
+                detail=f"Retry attempt {attempt}/{max_retries} — alternate strategy",
+            )
+            try:
+                retry_result = await agent.retry_with_reflection(task, workflow, task.error or "")
+                if retry_result.get("success"):
+                    task.status = TaskStatus.COMPLETED
+                    task.output_data = retry_result.get("output", {})
+                    task.output_data["self_corrected"] = True
+                    task.confidence = retry_result.get("confidence", 0.0)
+                    task.completed_at = datetime.now(timezone.utc)
+                    workflow.add_timeline_entry(
+                        "self_correction_success",
+                        agent=task.agent_type,
+                        detail=f"Self-corrected on attempt {attempt}",
+                        confidence=task.confidence,
+                    )
+                    return True
+            except Exception:
+                pass
+
+        # Escalation: mark for manual review
+        workflow.add_timeline_entry(
+            "escalation",
+            agent=task.agent_type,
+            detail=f"Exhausted {max_retries} retries — escalating to manual review",
+        )
+        return False
+
     def _should_retry(self, task: AgentTask) -> bool:
         """Determine if a failed task should be retried."""
-        from config import settings
         return task.status == TaskStatus.FAILED and settings.AGENT_MAX_RETRIES > 0
 
     async def _reflect_on_workflow(self, workflow: Workflow):
         """Perform system-level reflection on workflow outcomes."""
         successful_tasks = [t for t in workflow.tasks if t.status == TaskStatus.COMPLETED]
         failed_tasks = [t for t in workflow.tasks if t.status == TaskStatus.FAILED]
+        self_corrected = sum(1 for t in workflow.tasks if t.output_data.get("self_corrected"))
 
-        workflow.reasoning_chain.append({
+        reflection = {
             "step": "system_reflection",
             "type": "reflection",
-            "detail": f"Completed {len(successful_tasks)}/{len(workflow.tasks)} tasks",
+            "detail": f"Completed {len(successful_tasks)}/{len(workflow.tasks)} tasks ({self_corrected} self-corrected)",
             "confidence": len(successful_tasks) / max(len(workflow.tasks), 1),
             "risk": len(failed_tasks) / max(len(workflow.tasks), 1),
             "decision": "workflow_assessment",
-        })
+            "collaboration_index": len(set(workflow.agents_involved)) / max(len(self._agents), 1),
+            "shared_context_keys": list(workflow.shared_context.keys()),
+        }
+        workflow.reasoning_chain.append(reflection)
+
+        # Persist reflection insights to memory
+        if self.memory and successful_tasks:
+            for task in successful_tasks:
+                reflection_data = task.reasoning.get("reflection", {})
+                skill = reflection_data.get("extracted_skill") if isinstance(reflection_data, dict) else None
+                if skill:
+                    from models.agents import AgentExperience
+                    exp = AgentExperience(
+                        experience_id=f"refl_{task.task_id}",
+                        agent_type=task.agent_type,
+                        failure_type=workflow.event_type,
+                        context_summary=task.output_data.get("summary", ""),
+                        action_taken=task.action,
+                        outcome="success",
+                        success=True,
+                        confidence=task.confidence,
+                        fix_time_seconds=(
+                            (task.completed_at - task.created_at).total_seconds()
+                            if task.completed_at else 0
+                        ),
+                        reusable_skill=skill,
+                    )
+                    await self.memory.store_experience(exp)
 
     # ─── Query Methods ───
 

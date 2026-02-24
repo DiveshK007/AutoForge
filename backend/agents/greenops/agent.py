@@ -3,14 +3,15 @@ AutoForge GreenOps Agent — Sustainability Intelligence.
 
 Estimates pipeline energy usage, detects inefficient workflows,
 suggests optimizations, and tracks carbon efficiency.
+Supports DEMO_MODE.
 """
 
 import math
 from typing import Any, Dict
+from config import settings
 from agents.base_agent import BaseAgent
 from agents.reasoning_engine import ReasoningEngine
 from models.workflows import AgentTask, Workflow
-from config import settings
 
 GREENOPS_SYSTEM_PROMPT = """You are a Sustainability Optimization AI in the AutoForge autonomous engineering organization.
 
@@ -70,6 +71,27 @@ class GreenOpsAgent(BaseAgent):
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze pipeline efficiency and estimate carbon footprint."""
+        # ─── DEMO MODE ───
+        if settings.DEMO_MODE:
+            from demo.engine import get_demo_energy
+            # Detect scenario from context
+            retry_count = context.get("retry_count", 0)
+            if retry_count > 1:
+                energy = get_demo_energy("inefficient_pipeline")
+            else:
+                energy = get_demo_energy("pipeline_failure")
+            return {
+                "energy_kwh": energy.get("energy_kwh", 0.01),
+                "carbon_kg": energy.get("carbon_kg", 0.000005),
+                "retry_waste_kwh": energy.get("retry_waste_kwh", 0.0),
+                "efficiency_score": energy.get("efficiency_score", 85),
+                "optimizations": energy.get("optimizations", []),
+                "waste_sources": energy.get("waste_sources", []),
+                "confidence": 0.80,
+                "risk_score": 0.15,
+            }
+
+        # ─── LIVE MODE ───
         # Calculate energy metrics
         duration_hours = context.get("pipeline_duration_seconds", 300) / 3600
         cpu_cores = context.get("cpu_cores", 2)

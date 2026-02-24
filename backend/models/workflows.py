@@ -49,6 +49,7 @@ class AgentTask(BaseModel):
     action: str
     priority: TaskPriority = TaskPriority.MEDIUM
     status: TaskStatus = TaskStatus.QUEUED
+    dependencies: List[str] = []  # task_ids this task depends on (DAG edges)
     input_data: Dict[str, Any] = {}
     output_data: Dict[str, Any] = {}
     reasoning: Dict[str, Any] = {}
@@ -99,8 +100,22 @@ class Workflow(BaseModel):
     timeline_entries: List[TimelineEntry] = []
     trigger_payload: Dict[str, Any] = {}
     result: Dict[str, Any] = {}
+    # Shared context bus — agents publish results here for downstream consumers
+    shared_context: Dict[str, Any] = {}
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
+
+    def publish_context(self, agent_type: str, key: str, value: Any):
+        """Publish data to the shared context bus for downstream agents."""
+        if agent_type not in self.shared_context:
+            self.shared_context[agent_type] = {}
+        self.shared_context[agent_type][key] = value
+
+    def consume_context(self, agent_type: str = None) -> Dict[str, Any]:
+        """Consume shared context — optionally filter by source agent."""
+        if agent_type:
+            return self.shared_context.get(agent_type, {})
+        return dict(self.shared_context)
 
     @property
     def duration_seconds(self) -> Optional[float]:

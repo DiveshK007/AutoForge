@@ -2,10 +2,11 @@
 AutoForge Review Agent — Code Quality Intelligence.
 
 Evaluates code quality, detects architecture violations,
-performance risks, and security smells.
+performance risks, and security smells. Supports DEMO_MODE.
 """
 
 from typing import Any, Dict
+from config import settings
 from agents.base_agent import BaseAgent
 from agents.reasoning_engine import ReasoningEngine
 from models.workflows import AgentTask, Workflow
@@ -56,6 +57,25 @@ class ReviewAgent(BaseAgent):
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze code for quality issues."""
+        if settings.DEMO_MODE:
+            from demo.engine import get_demo_scenario
+            scenario = get_demo_scenario("merge_request_opened") or {}
+            return {
+                "review": {
+                    "quality_score": 0.72,
+                    "issues": [
+                        {"severity": "high", "type": "performance", "description": "N+1 query pattern in user listing endpoint", "file": "api/users.py", "suggestion": "Use select_related or prefetch_related"},
+                        {"severity": "medium", "type": "security", "description": "Missing input validation on request body", "file": "api/users.py", "suggestion": "Add Pydantic request model"},
+                        {"severity": "low", "type": "style", "description": "Unused import 'os' in module header", "file": "utils/helpers.py", "suggestion": "Remove unused import"},
+                    ],
+                    "summary": "3 issues found: 1 performance risk, 1 security concern, 1 style issue",
+                    "confidence": 0.78,
+                    "risk_score": 0.22,
+                },
+                "confidence": 0.78,
+                "risk_score": 0.22,
+            }
+
         result = await self.reasoning_engine.reason(
             system_prompt=REVIEW_SYSTEM_PROMPT,
             context=f"""Review this merge request:
@@ -143,6 +163,14 @@ Analyze for:
         }
 
     async def reflect(self, result: Dict[str, Any], plan: Dict[str, Any]) -> Dict[str, Any]:
+        if settings.DEMO_MODE:
+            from demo.engine import get_demo_reflection
+            return get_demo_reflection("merge_request_opened") or {
+                "success": True,
+                "outcome": result.get("summary", "Review complete"),
+                "confidence": 0.78,
+                "extracted_skill": "code_review_performance_pattern",
+            }
         return await self.reasoning_engine.reflect(
             system_prompt=REVIEW_SYSTEM_PROMPT,
             action_taken="code_review",

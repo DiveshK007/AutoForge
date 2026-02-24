@@ -133,16 +133,73 @@ Events to enable:
 
 ## 📊 Telemetry Metrics
 
-| Metric | Formula | What It Measures |
-|--------|---------|-----------------|
-| Success Rate | Successful Fixes / Total Attempts × 100 | Execution reliability |
-| Fix Accuracy | Correct Diagnoses / Total Diagnoses | Reasoning correctness |
-| Decision Confidence | Selected Branch Prob / Sum All Probs | Reasoning certainty |
-| Reasoning Depth | Explored Branches / Max Branches | Cognitive exploration |
-| Learning Rate | (Initial Time - Current Time) / Initial Time × 100 | Autonomy growth |
-| Self-Correction Rate | Successful Retries / Failed Attempts | Reflection effectiveness |
-| Collaboration Index | Multi-Agent Tasks / Total Tasks | Orchestration depth |
-| Carbon Efficiency | (Baseline - Optimized) / Baseline × 100 | Sustainability impact |
+### Meta-Intelligence Score (MIS) — Weighted 5-Factor Formula
+
+```
+MIS = Accuracy × 0.30 + Learning × 0.25 + Reflection × 0.20 + Collaboration × 0.15 + Sustainability × 0.10
+```
+
+| Metric | Weight | Formula | What It Measures |
+|--------|--------|---------|-----------------|
+| Accuracy | 30% | Completed / Total Workflows | Execution reliability |
+| Learning | 25% | Confidence Improvement Over Time | Autonomy growth |
+| Reflection | 20% | Self-Corrections / Failed Attempts | Self-correction ability |
+| Collaboration | 15% | Multi-Agent Workflows / Total | Orchestration depth |
+| Sustainability | 10% | Energy Efficiency Score | Carbon awareness |
+
+### Additional Metrics
+
+| Metric | What It Measures |
+|--------|-----------------|
+| Fix Accuracy | Correct Diagnoses / Total Diagnoses |
+| Reasoning Depth | Explored Branches / Max Branches (depth-2 trees) |
+| Carbon Efficiency | (Baseline - Optimized) / Baseline × 100 |
+
+---
+
+## 🔀 DAG Execution & Shared Context
+
+AutoForge uses **dependency-aware DAG execution** — not a flat queue.
+
+```
+Event: pipeline_failure
+
+Wave 0 (no deps):   [ SRE (diagnose) ]  [ GreenOps (audit) ]
+                          │
+                          ▼  (shared context flows downstream)
+Wave 1 (dep: SRE):  [ Security (validate) ]  [ QA (test) ]  [ Docs (changelog) ]
+```
+
+Agents share findings through a **Shared Context Bus**:
+- SRE publishes `root_cause`, `fix_branch`, `confidence`
+- Downstream agents consume upstream context for informed decisions
+- Cross-agent knowledge persists in memory for future workflows
+
+---
+
+## 🛡️ Safety Guardrails
+
+| Guardrail | Description |
+|-----------|-------------|
+| Branch Protection | Agents cannot push to `main`, `master`, `production`, `release`, `staging` |
+| Diff Size Limits | Maximum 500 lines per merge request |
+| High-Risk Actions | `force_push`, `delete_branch`, `drop_database`, etc. require human approval |
+| Escalation Protocol | Retry → Alternate Agent → Manual Review |
+| Policy Learning | Tracks violations and adapts agent behaviour |
+
+---
+
+## 🎮 DEMO_MODE
+
+Set `DEMO_MODE=True` (default) for **deterministic live demos without LLM API calls**.
+
+Precomputed reasoning trees cover 4 scenarios:
+- `pipeline_failure` — Missing numpy dependency
+- `security_vulnerability` — SQL injection detection
+- `merge_request_opened` — Code review and test generation
+- `inefficient_pipeline` — GreenOps optimization
+
+All 6 agents produce realistic outputs using precomputed data.
 
 ---
 
@@ -177,20 +234,61 @@ Each agent generates:
 AutoForge/
 ├── backend/                  # FastAPI backend services
 │   ├── main.py              # Application entry point
+│   ├── config.py            # Settings (DEMO_MODE, API keys, thresholds)
 │   ├── brain/               # Command Brain orchestrator
-│   ├── agents/              # Agent workforce
-│   ├── integrations/        # GitLab integration layer
+│   │   ├── orchestrator.py  # DAG wave executor + retry/escalation
+│   │   ├── task_decomposer.py # Event → DAG tasks with dependency wiring
+│   │   ├── router.py        # Event → agent routing rules
+│   │   ├── policy_engine.py # Branch protection, diff limits, guardrails
+│   │   └── conflict_resolver.py
+│   ├── agents/              # Agent workforce (6 agents)
+│   │   ├── base_agent.py    # 5-phase cognitive pipeline
+│   │   ├── reasoning_engine.py # Claude Sonnet 4 integration
+│   │   ├── sre/             # SRE: diagnosis, evidence weighting, depth-2 trees
+│   │   ├── security/        # Security: vulnerability scanning, CVE analysis
+│   │   ├── qa/              # QA: test generation, regression detection
+│   │   ├── review/          # Review: code review, architecture analysis
+│   │   ├── docs/            # Docs: changelog, API docs, README updates
+│   │   └── greenops/        # GreenOps: carbon scoring, pipeline optimization
+│   ├── demo/                # DEMO_MODE precomputed reasoning trees
+│   │   └── engine.py        # 4 scenarios × 6 agents
 │   ├── memory/              # Memory & learning systems
+│   │   └── store.py         # Episodic + Semantic + Cross-Agent + Policy layers
+│   ├── models/              # Pydantic data models
+│   │   ├── workflows.py     # Shared context bus, DAG dependencies
+│   │   ├── events.py        # Normalized events
+│   │   └── agents.py        # ReasoningTree, ReasoningNode, Hypothesis
 │   ├── telemetry/           # Metrics & observability
+│   │   └── collector.py     # 5-factor weighted MIS formula
 │   ├── tools/               # Execution tool gateway
-│   └── workflows/           # Workflow definitions
+│   │   └── gitlab_tools.py  # GitLab API + generate_tests + update_docs
+│   ├── tests/               # 75 tests (pytest + pytest-asyncio)
+│   │   ├── test_core.py     # Core model/brain tests
+│   │   ├── test_api.py      # API endpoint tests
+│   │   └── test_audit_improvements.py # DAG, demo, memory, policy tests
+│   └── api/                 # FastAPI route handlers
 ├── dashboard/               # React/Next.js frontend
 │   ├── src/
-│   │   ├── app/            # Next.js app router
-│   │   ├── components/     # UI components
-│   │   └── lib/            # Utilities
-├── docker-compose.yml       # Container orchestration
-└── demo_scenarios/          # Pre-built demo datasets
+│   │   ├── app/            # Next.js app router (page.tsx)
+│   │   ├── components/
+│   │   │   ├── workflows/  # DAGView, SharedContextView, Timeline
+│   │   │   ├── reasoning/  # ReasoningTree (React Flow)
+│   │   │   ├── metrics/    # MISBreakdown, MetaScore
+│   │   │   ├── charts/     # MetricsCharts, LearningCurveChart
+│   │   │   ├── agents/     # AgentGrid
+│   │   │   ├── sustainability/ # SustainabilityPanel
+│   │   │   ├── demo/       # DemoTrigger
+│   │   │   └── ui/         # GlassCard, MetricCard, StatusBadge
+│   │   └── lib/            # API client, utilities
+├── docs/
+│   └── architecture/       # System diagrams and design docs
+├── prompts/                # Externalized YAML prompt templates
+│   ├── agents.yaml         # All agent prompts
+│   └── loader.py           # YAML → string renderer
+├── infra/terraform/        # IaC deployment stubs (GCP Cloud Run)
+├── demo_scenarios/         # Pre-built demo JSON datasets
+├── docker-compose.yml      # 6-service container orchestration
+└── README.md
 ```
 
 ---

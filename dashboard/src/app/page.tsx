@@ -19,6 +19,9 @@ import { ActivityFeed } from '@/components/activity/ActivityFeed';
 import { SustainabilityPanel } from '@/components/sustainability/SustainabilityPanel';
 import { DemoTrigger } from '@/components/demo/DemoTrigger';
 import { MetaIntelligenceScore } from '@/components/metrics/MetaScore';
+import { DAGView } from '@/components/workflows/DAGView';
+import { SharedContextView } from '@/components/workflows/SharedContextView';
+import { MISBreakdown } from '@/components/metrics/MISBreakdown';
 
 type Tab = 'overview' | 'agents' | 'reasoning' | 'learning' | 'sustainability' | 'workflows';
 
@@ -325,18 +328,44 @@ function SustainabilityTab({
 }
 
 function WorkflowsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
+  // Example DAG tasks for visualization (populated when workflows exist)
+  const demoTasks = [
+    { task_id: 'sre-1', agent_type: 'sre', action: 'diagnose', status: 'completed', dependencies: [] },
+    { task_id: 'greenops-1', agent_type: 'greenops', action: 'audit', status: 'completed', dependencies: [] },
+    { task_id: 'security-1', agent_type: 'security', action: 'validate', status: 'completed', dependencies: ['sre-1'] },
+    { task_id: 'qa-1', agent_type: 'qa', action: 'test', status: 'running', dependencies: ['sre-1'] },
+    { task_id: 'docs-1', agent_type: 'docs', action: 'changelog', status: 'pending', dependencies: ['sre-1'] },
+  ];
+
+  const demoSharedContext: Record<string, Record<string, unknown>> = {
+    sre: { root_cause: 'missing numpy dependency', fix_branch: 'autoforge/fix-pipeline-abc123', confidence: 0.92 },
+    security: { scan_result: 'clean', cve_count: 0 },
+  };
+
   return (
     <div className="space-y-6">
-      <GlassCard title="Workflow History" icon="⚡">
-        <div className="text-center py-8 text-surface-200/40">
-          <p className="text-3xl mb-2">⚡</p>
-          <p className="text-sm">
-            {(dashboard?.total_workflows ?? 0) > 0
-              ? `${dashboard!.total_workflows} workflows processed`
-              : 'No workflows yet — trigger a demo scenario to start'}
-          </p>
-        </div>
+      {/* DAG Execution View */}
+      <GlassCard title="Task DAG Execution" icon="🔀" subtitle="Dependency-ordered wave execution">
+        <DAGView tasks={demoTasks} />
       </GlassCard>
+
+      {/* Shared Context */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <GlassCard title="Shared Context Bus" icon="🔗" subtitle="Cross-agent data flow">
+          <SharedContextView context={demoSharedContext} />
+        </GlassCard>
+
+        <GlassCard title="Workflow History" icon="⚡">
+          <div className="text-center py-8 text-surface-200/40">
+            <p className="text-3xl mb-2">⚡</p>
+            <p className="text-sm">
+              {(dashboard?.total_workflows ?? 0) > 0
+                ? `${dashboard!.total_workflows} workflows processed`
+                : 'No workflows yet — trigger a demo scenario to start'}
+            </p>
+          </div>
+        </GlassCard>
+      </div>
 
       <GlassCard title="Demo Control Panel" icon="🎮">
         <DemoTrigger />
