@@ -5,10 +5,12 @@ Loads environment variables and provides typed settings.
 
 from typing import Optional
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     # ─── GitLab ───
     GITLAB_URL: str = "https://gitlab.com"
@@ -52,10 +54,6 @@ class Settings(BaseSettings):
     GREENOPS_CARBON_FACTOR: float = 0.000475
     GREENOPS_CPU_POWER_DRAW: float = 65.0
     GREENOPS_MEMORY_POWER_DRAW: float = 0.3
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()
