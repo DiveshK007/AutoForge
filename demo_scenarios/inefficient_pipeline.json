@@ -1,0 +1,116 @@
+{
+  "name": "Inefficient Pipeline - Long Build Times",
+  "description": "Simulates an inefficient CI/CD pipeline with high resource usage and long build duration, ideal for GreenOps agent optimization",
+  "event_type": "pipeline_completed",
+  "payload": {
+    "project_id": "demo-project-1",
+    "project_name": "backend-api",
+    "ref": "main",
+    "pipeline_id": 9988,
+    "pipeline_status": "success",
+    "pipeline_url": "https://gitlab.example.com/demo/backend-api/-/pipelines/9988",
+    "duration_seconds": 1847,
+    "stages": [
+      {
+        "name": "build",
+        "status": "success",
+        "duration_seconds": 620,
+        "jobs": [
+          {
+            "name": "docker-build",
+            "status": "success",
+            "duration_seconds": 580,
+            "runner": "shared-runner-xl",
+            "cpu_usage_percent": 92,
+            "memory_mb": 4096
+          },
+          {
+            "name": "compile-assets",
+            "status": "success",
+            "duration_seconds": 310,
+            "runner": "shared-runner-xl",
+            "cpu_usage_percent": 78,
+            "memory_mb": 2048
+          }
+        ]
+      },
+      {
+        "name": "test",
+        "status": "success",
+        "duration_seconds": 740,
+        "jobs": [
+          {
+            "name": "unit-tests",
+            "status": "success",
+            "duration_seconds": 480,
+            "runner": "shared-runner-xl",
+            "cpu_usage_percent": 45,
+            "memory_mb": 3072
+          },
+          {
+            "name": "integration-tests",
+            "status": "success",
+            "duration_seconds": 720,
+            "runner": "shared-runner-xl",
+            "cpu_usage_percent": 38,
+            "memory_mb": 4096
+          },
+          {
+            "name": "e2e-tests",
+            "status": "success",
+            "duration_seconds": 690,
+            "runner": "shared-runner-xl",
+            "cpu_usage_percent": 55,
+            "memory_mb": 6144
+          }
+        ]
+      },
+      {
+        "name": "security",
+        "status": "success",
+        "duration_seconds": 320,
+        "jobs": [
+          {
+            "name": "sast",
+            "status": "success",
+            "duration_seconds": 210,
+            "runner": "shared-runner-lg",
+            "cpu_usage_percent": 60,
+            "memory_mb": 2048
+          },
+          {
+            "name": "dependency-scan",
+            "status": "success",
+            "duration_seconds": 290,
+            "runner": "shared-runner-lg",
+            "cpu_usage_percent": 35,
+            "memory_mb": 1536
+          }
+        ]
+      },
+      {
+        "name": "deploy",
+        "status": "success",
+        "duration_seconds": 180,
+        "jobs": [
+          {
+            "name": "deploy-staging",
+            "status": "success",
+            "duration_seconds": 170,
+            "runner": "shared-runner-md",
+            "cpu_usage_percent": 25,
+            "memory_mb": 1024
+          }
+        ]
+      }
+    ],
+    "inefficiency_indicators": {
+      "sequential_test_stages": true,
+      "oversized_runners": true,
+      "no_build_cache": true,
+      "duplicate_dependency_installs": 3,
+      "unparallelized_jobs": ["unit-tests", "integration-tests", "e2e-tests"],
+      "estimated_parallelized_duration_seconds": 980
+    }
+  }
+}

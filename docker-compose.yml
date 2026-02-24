@@ -1,0 +1,138 @@
+version: "3.9"
+
+services:
+  # ── Backend API ──────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoforge-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_WEBHOOK_SECRET=${GITLAB_WEBHOOK_SECRET:-autoforge-secret}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - DATABASE_URL=postgresql://autoforge:autoforge@postgres:5432/autoforge
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8100
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=http://localhost:3000,http://dashboard:3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    volumes:
+      - ./backend:/app/backend
+      - ./demo_scenarios:/app/demo_scenarios
+    restart: unless-stopped
+    networks:
+      - autoforge-net
+
+  # ── Celery Worker ────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoforge-worker
+    command: celery -A backend.worker worker --loglevel=info --concurrency=4
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - DATABASE_URL=postgresql://autoforge:autoforge@postgres:5432/autoforge
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8100
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend
+    restart: unless-stopped
+    networks:
+      - autoforge-net
+
+  # ── Dashboard Frontend ───────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: autoforge-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - autoforge-net
+
+  # ── Redis ────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: autoforge-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - autoforge-net
+
+  # ── PostgreSQL ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: autoforge-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: autoforge
+      POSTGRES_PASSWORD: autoforge
+      POSTGRES_DB: autoforge
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - autoforge-net
+
+  # ── ChromaDB (Vector Store) ──────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: autoforge-chromadb
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    restart: unless-stopped
+    networks:
+      - autoforge-net
+
+volumes:
+  redis-data:
+  postgres-data:
+  chroma-data:
+
+networks:
+  autoforge-net:
+    driver: bridge

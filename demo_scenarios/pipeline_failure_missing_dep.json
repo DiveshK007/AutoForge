@@ -1,0 +1,27 @@
+{
+  "name": "Pipeline Failure - Missing Dependency",
+  "description": "Simulates a pipeline failure caused by a missing Python dependency (numpy)",
+  "event_type": "pipeline_failure",
+  "payload": {
+    "project_id": "demo-project-1",
+    "project_name": "backend-api",
+    "pipeline_id": 42,
+    "pipeline_url": "https://gitlab.com/demo/backend-api/-/pipelines/42",
+    "ref": "main",
+    "commit_sha": "abc123def456",
+    "commit_message": "refactor: clean up requirements and remove unused deps",
+    "failed_jobs": [
+      {
+        "id": 101,
+        "name": "build-and-test",
+        "stage": "test",
+        "status": "failed"
+      }
+    ],
+    "error_logs": "Collecting packages...\nInstalling dependencies from requirements.txt\n\nStep 4/8 : RUN pip install -r requirements.txt\n ---> Running in 4a8b9c0d1e2f\nSuccessfully installed flask-2.3.0 requests-2.31.0\n\nStep 6/8 : RUN python -m pytest tests/\n ---> Running in 5b6c7d8e9f0a\nIMPORTANT: \n\n========================= test session starts ==========================\nplatform linux -- Python 3.11.4, pytest-7.4.0\ncollected 24 items\n\ntests/test_data_processor.py::test_matrix_operations FAILED\ntests/test_data_processor.py::test_statistical_analysis FAILED\ntests/test_analytics.py::test_compute_metrics FAILED\n\n================================ FAILURES ================================\n\nFAILED tests/test_data_processor.py::test_matrix_operations - ModuleNotFoundError: No module named 'numpy'\nFAILED tests/test_data_processor.py::test_statistical_analysis - ModuleNotFoundError: No module named 'numpy'\nFAILED tests/test_analytics.py::test_compute_metrics - ModuleNotFoundError: No module named 'numpy'\n\n========================= 3 failed, 21 passed ==========================\n\nERROR: Job failed: exit code 1",
+    "pipeline_duration": 180,
+    "cpu_cores": 2,
+    "memory_gb": 4,
+    "retry_count": 0
+  }
+}

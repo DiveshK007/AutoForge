@@ -1,0 +1,21 @@
+# Heavy optional dependencies — only needed in Docker/production
+# Install with: pip install -r requirements-full.txt
+
+-r requirements.txt
+
+# ─── Task Queue ───
+celery[redis]>=5.4.0
+redis>=5.2.1
+
+# ─── Database ───
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30.0
+alembic>=1.14.0
+psycopg2-binary>=2.9.10
+
+# ─── Vector Database (very slow to install locally) ───
+chromadb>=0.5.23
+
+# ─── Security ───
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4

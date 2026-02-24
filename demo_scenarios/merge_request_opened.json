@@ -1,0 +1,21 @@
+{
+  "name": "Merge Request Opened - New Feature",
+  "description": "Simulates a new merge request that needs code review and test suggestions",
+  "event_type": "merge_request_opened",
+  "payload": {
+    "project_id": "demo-project-1",
+    "project_name": "backend-api",
+    "ref": "main",
+    "mr_id": 15,
+    "mr_title": "feat: add user analytics endpoint",
+    "mr_description": "Adds a new endpoint for retrieving user analytics data including session counts, page views, and engagement metrics.",
+    "source_branch": "feature/user-analytics",
+    "target_branch": "main",
+    "changed_files": [
+      "src/routes/analytics.py",
+      "src/services/analytics_service.py",
+      "src/models/analytics.py"
+    ],
+    "diff": "diff --git a/src/routes/analytics.py b/src/routes/analytics.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/routes/analytics.py\n@@ -0,0 +1,45 @@\n+from fastapi import APIRouter, Query\n+from services.analytics_service import AnalyticsService\n+\n+router = APIRouter()\n+service = AnalyticsService()\n+\n+@router.get('/analytics/users/{user_id}')\n+async def get_user_analytics(user_id: str, days: int = Query(default=30)):\n+    data = service.get_analytics(user_id, days)\n+    return {'analytics': data}\n+\n+@router.get('/analytics/summary')\n+async def get_summary(days: int = 7):\n+    # TODO: add authentication\n+    summary = service.get_summary(days)\n+    return summary\n"
+  }
+}

@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files first for caching
+COPY dashboard/package.json dashboard/package-lock.json* ./
+
+# Install dependencies
+RUN npm install
+
+# Copy dashboard code
+COPY dashboard/ .
+
+# Build for production
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
