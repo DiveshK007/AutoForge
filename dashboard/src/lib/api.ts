@@ -182,4 +182,23 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scenario: scenarioName }),
     }).then((r) => r.json()),
+
+  // Explain
+  explainWorkflow: (workflowId: string) =>
+    fetchAPI<{
+      workflow_id: string;
+      explanation: string;
+      format: string;
+      agents_involved?: string[];
+      reasoning_depth?: number;
+      confidence?: number;
+    }>(`/api/v1/explain/workflow/${workflowId}`),
+
+  explainAgent: (agentType: string) =>
+    fetchAPI<{
+      agent_type: string;
+      description: string;
+      capabilities: string[];
+      explanation: string;
+    }>(`/api/v1/explain/agent/${agentType}`),
 };

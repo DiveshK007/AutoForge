@@ -8,11 +8,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from logging_config import setup_logging, get_logger
 from config import settings
 from api.router import api_router
+from api.websocket import router as ws_router, ws_manager
+from api.explain import router as explain_router
 from brain.orchestrator import CommandBrain
 from memory.store import MemoryStore
 from telemetry.collector import TelemetryCollector
+from middleware.correlation import CorrelationMiddleware
+from middleware.rate_limiter import RateLimitMiddleware
+
+# ─── Initialize structured logging before anything else ───
+setup_logging()
+log = get_logger("main")
 
 
 @asynccontextmanager
@@ -28,16 +37,24 @@ async def lifespan(app: FastAPI):
     app.state.brain.set_memory(app.state.memory)
     app.state.brain.set_telemetry(app.state.telemetry)
 
-    print("🔥 AutoForge Command Brain initialized")
-    print("🧠 Agent workforce standing by")
-    print(f"🌐 Listening on {settings.APP_HOST}:{settings.APP_PORT}")
+    # Start WebSocket broadcast worker
+    await ws_manager.start()
+
+    log.info(
+        "autoforge_started",
+        host=settings.APP_HOST,
+        port=settings.APP_PORT,
+        demo_mode=settings.DEMO_MODE,
+        environment=settings.APP_ENV,
+    )
 
     yield
 
     # ─── Shutdown ───
+    await ws_manager.stop()
     await app.state.memory.shutdown()
     await app.state.telemetry.shutdown()
-    print("🛑 AutoForge shutting down gracefully")
+    log.info("autoforge_shutdown")
 
 
 app = FastAPI(
@@ -47,7 +64,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─── CORS Middleware ───
+# ─── Middleware Stack (order matters: outermost first) ───
+app.add_middleware(CorrelationMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,11 +77,13 @@ app.add_middleware(
 
 # ─── API Routes ───
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(explain_router, prefix="/api/v1/explain", tags=["explain"])
+app.include_router(ws_router)
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint — liveness probe."""
     return {
         "status": "operational",
         "system": "AutoForge",
@@ -70,3 +91,29 @@ async def health_check():
         "brain": "online",
         "agents": "standing_by",
     }
+
+
+@app.get("/ready")
+async def readiness_probe():
+    """
+    Readiness probe — checks that all subsystems are initialized.
+    Returns 503 if not ready.
+    """
+    checks = {
+        "brain": hasattr(app.state, "brain") and app.state.brain is not None,
+        "memory": hasattr(app.state, "memory") and app.state.memory is not None,
+        "telemetry": hasattr(app.state, "telemetry") and app.state.telemetry is not None,
+        "websocket": ws_manager.is_running,
+    }
+
+    all_ready = all(checks.values())
+
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=200 if all_ready else 503,
+        content={
+            "ready": all_ready,
+            "checks": checks,
+            "version": "1.0.0",
+        },
+    )

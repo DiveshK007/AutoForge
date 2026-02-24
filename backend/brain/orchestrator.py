@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Set
 from uuid import uuid4
 
 from config import settings
+from logging_config import get_logger
 from models.events import NormalizedEvent, EventType
 from models.workflows import (
     Workflow,
@@ -32,6 +33,8 @@ from brain.state_manager import StateManager
 from brain.task_decomposer import TaskDecomposer
 from brain.conflict_resolver import ConflictResolver
 from brain.policy_engine import PolicyEngine
+
+log = get_logger("brain")
 
 
 class CommandBrain:
@@ -72,7 +75,7 @@ class CommandBrain:
         }
 
         mode = "DEMO" if settings.DEMO_MODE else "LIVE"
-        print(f"  🤖 Initialized {len(self._agents)} agents: {list(self._agents.keys())} [{mode} mode]")
+        log.info("agents_initialized", count=len(self._agents), agents=list(self._agents.keys()), mode=mode)
 
     def set_memory(self, memory):
         """Inject memory store dependency."""
@@ -122,6 +125,16 @@ class CommandBrain:
 
         # Process asynchronously
         asyncio.create_task(self._process_workflow(workflow, event))
+
+        # Broadcast new workflow via WebSocket
+        try:
+            from api.websocket import broadcast_workflow_update
+            await broadcast_workflow_update(workflow.workflow_id, "created", {
+                "event_type": event.event_type.value,
+                "project_id": event.project_id,
+            })
+        except Exception:
+            pass  # WebSocket is best-effort
 
         return workflow.workflow_id
 
@@ -243,6 +256,16 @@ class CommandBrain:
                             confidence=task.confidence,
                         )
 
+                        # Broadcast agent completion via WebSocket
+                        try:
+                            from api.websocket import broadcast_agent_action
+                            await broadcast_agent_action(
+                                task.agent_type, task.action,
+                                "completed", task.confidence,
+                            )
+                        except Exception:
+                            pass
+
                     except Exception as e:
                         task.status = TaskStatus.FAILED
                         task.error = str(e)
@@ -281,6 +304,16 @@ class CommandBrain:
                 "workflow_completed",
                 detail=f"Status: {workflow.status.value}, Duration: {workflow.duration_seconds:.1f}s, Agents: {workflow.agents_involved}",
             )
+
+            # Broadcast workflow completion via WebSocket
+            try:
+                from api.websocket import broadcast_workflow_update
+                await broadcast_workflow_update(
+                    workflow.workflow_id, workflow.status.value,
+                    {"duration": workflow.duration_seconds, "agents": workflow.agents_involved},
+                )
+            except Exception:
+                pass
 
             # ─── Phase 8: Memory Encoding ───
             if self.memory:

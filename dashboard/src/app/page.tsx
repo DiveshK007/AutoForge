@@ -14,7 +14,11 @@ import type {
 import { formatPercentage, formatDuration } from '@/lib/utils';
 
 import { GlassCard, MetricCard, StatusBadge } from '@/components/ui/Cards';
+import { ErrorBoundary, SafeComponent } from '@/components/ui/ErrorBoundary';
+import { OverviewTabSkeleton, MetricsRowSkeleton, GlassCardSkeleton } from '@/components/ui/Skeletons';
+import { ThemeProvider, ThemeToggle } from '@/components/ui/ThemeProvider';
 import { AgentGrid } from '@/components/agents/AgentGrid';
+import { AgentCommGraph, DEMO_COMM_LINKS } from '@/components/agents/AgentCommGraph';
 import { ReasoningTree } from '@/components/reasoning/ReasoningTree';
 import { MetricsOverTimeChart, LearningCurveChart, CarbonSavingsChart } from '@/components/charts/MetricsCharts';
 import { ActivityFeed } from '@/components/activity/ActivityFeed';
@@ -23,11 +27,23 @@ import { DemoTrigger } from '@/components/demo/DemoTrigger';
 import { MetaIntelligenceScore } from '@/components/metrics/MetaScore';
 import { DAGView } from '@/components/workflows/DAGView';
 import { SharedContextView } from '@/components/workflows/SharedContextView';
+import { RetryTimeline, RetryBadge } from '@/components/workflows/RetryTimeline';
 import { MISBreakdown } from '@/components/metrics/MISBreakdown';
+import { useAutoForgeWebSocket } from '@/hooks/useWebSocket';
 
 type Tab = 'overview' | 'agents' | 'reasoning' | 'learning' | 'sustainability' | 'workflows';
 
 export default function DashboardPage() {
+  return (
+    <ThemeProvider>
+      <ErrorBoundary>
+        <DashboardContent />
+      </ErrorBoundary>
+    </ThemeProvider>
+  );
+}
+
+function DashboardContent() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
@@ -40,6 +56,16 @@ export default function DashboardPage() {
   const [learningDash, setLearningDash] = useState<LearningDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // WebSocket for real-time updates
+  const { connected: wsConnected, lastMessage } = useAutoForgeWebSocket({
+    onMessage: (msg) => {
+      // Trigger a faster refresh on important events
+      if (msg.event === 'workflow_update' || msg.event === 'agent_action') {
+        fetchAll();
+      }
+    },
+  });
 
   const fetchAll = useCallback(async () => {
     try {
@@ -112,6 +138,13 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* WebSocket indicator */}
+            <div className="flex items-center gap-1.5" aria-label={wsConnected ? 'Real-time connected' : 'Real-time disconnected'}>
+              <div className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-400' : 'bg-surface-200/30'}`} />
+              <span className="text-[10px] text-surface-200/40">{wsConnected ? 'Live' : 'Polling'}</span>
+            </div>
+            {/* Theme toggle */}
+            <ThemeToggle />
             {/* System status */}
             <div className="flex items-center gap-2">
               <div
@@ -120,6 +153,7 @@ export default function DashboardPage() {
                     ? 'bg-emerald-400 animate-pulse-slow'
                     : 'bg-amber-400'
                 }`}
+                aria-hidden="true"
               />
               <span className="text-xs text-surface-200/60">
                 {dashboard?.system_status || 'Connecting...'}
@@ -139,14 +173,18 @@ export default function DashboardPage() {
 
         {/* Tab bar */}
         <div className="max-w-[1600px] mx-auto px-6">
-          <nav className="flex gap-1 -mb-px">
+          <nav className="flex gap-1 -mb-px" role="tablist" aria-label="Dashboard sections">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`tabpanel-${tab.id}`}
                 className={`
                   flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium
                   border-b-2 transition-all duration-200
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-900
                   ${
                     activeTab === tab.id
                       ? 'border-brand-400 text-brand-300'
@@ -154,7 +192,7 @@ export default function DashboardPage() {
                   }
                 `}
               >
-                <span>{tab.icon}</span>
+                <span aria-hidden="true">{tab.icon}</span>
                 <span>{tab.label}</span>
               </button>
             ))}
@@ -163,55 +201,69 @@ export default function DashboardPage() {
       </header>
 
       {/* Main content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-6">
+      <main className="max-w-[1600px] mx-auto px-6 py-6" role="main">
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm" role="alert">
             ⚠️ {error} — Make sure the backend is running on port 8000
           </div>
         )}
 
-        {activeTab === 'overview' && (
-          <OverviewTab
-            dashboard={dashboard}
-            activity={activity}
-            metricsHistory={metricsHistory}
-          />
+        {loading && activeTab === 'overview' && <OverviewTabSkeleton />}
+
+        {!loading && activeTab === 'overview' && (
+          <SafeComponent fallbackMessage="Overview tab encountered an error">
+            <OverviewTab
+              dashboard={dashboard}
+              activity={activity}
+              metricsHistory={metricsHistory}
+            />
+          </SafeComponent>
         )}
 
         {activeTab === 'agents' && (
-          <AgentsTab dashboard={dashboard} />
+          <SafeComponent fallbackMessage="Agents tab encountered an error">
+            <AgentsTab dashboard={dashboard} />
+          </SafeComponent>
         )}
 
         {activeTab === 'reasoning' && (
-          <ReasoningTab
-            reasoning={reasoning}
-            allTrees={allTrees}
-            selectedTree={selectedTree}
-            onSelectTree={(key) => {
-              setSelectedTree(key);
-              setReasoning(allTrees[key] || null);
-            }}
-          />
+          <SafeComponent fallbackMessage="Reasoning tab encountered an error">
+            <ReasoningTab
+              reasoning={reasoning}
+              allTrees={allTrees}
+              selectedTree={selectedTree}
+              onSelectTree={(key) => {
+                setSelectedTree(key);
+                setReasoning(allTrees[key] || null);
+              }}
+            />
+          </SafeComponent>
         )}
 
         {activeTab === 'learning' && (
-          <LearningTab
-            learningCurve={learningCurve}
-            metricsHistory={metricsHistory}
-            learningDash={learningDash}
-          />
+          <SafeComponent fallbackMessage="Learning tab encountered an error">
+            <LearningTab
+              learningCurve={learningCurve}
+              metricsHistory={metricsHistory}
+              learningDash={learningDash}
+            />
+          </SafeComponent>
         )}
 
         {activeTab === 'sustainability' && (
-          <SustainabilityTab
-            metrics={dashboard?.metrics || null}
-            history={metricsHistory}
-            carbonData={carbonData}
-          />
+          <SafeComponent fallbackMessage="Sustainability tab encountered an error">
+            <SustainabilityTab
+              metrics={dashboard?.metrics || null}
+              history={metricsHistory}
+              carbonData={carbonData}
+            />
+          </SafeComponent>
         )}
 
         {activeTab === 'workflows' && (
-          <WorkflowsTab dashboard={dashboard} />
+          <SafeComponent fallbackMessage="Workflows tab encountered an error">
+            <WorkflowsTab dashboard={dashboard} />
+          </SafeComponent>
         )}
       </main>
     </div>
@@ -342,6 +394,16 @@ function AgentsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
       <GlassCard title="Agent Collaboration" icon="🔗" subtitle="Cross-agent knowledge sharing patterns">
         <CollaborationMatrix agents={agents} />
       </GlassCard>
+
+      {/* Agent Communication Graph */}
+      <SafeComponent fallbackMessage="Communication graph could not be loaded">
+        <GlassCard title="Agent Communication Flow" icon="🔀" subtitle="Real-time data flow between agents via shared context bus">
+          <AgentCommGraph
+            agents={agents.map(a => a.type)}
+            links={DEMO_COMM_LINKS}
+          />
+        </GlassCard>
+      </SafeComponent>
     </div>
   );
 }
@@ -645,6 +707,17 @@ function WorkflowsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
 
       <GlassCard title="Demo Control Panel" icon="🎮" subtitle="Trigger a scenario to watch the full pipeline">
         <DemoTrigger />
+      </GlassCard>
+
+      {/* Retry Visualization */}
+      <GlassCard title="Self-Correction Timeline" icon="🔄" subtitle="Agent retry and escalation history">
+        <RetryTimeline
+          retries={[
+            { attempt: 1, maxAttempts: 3, agent: 'sre', strategy: 'Original diagnosis — missing dependency', outcome: 'failure', confidence: 0.45, duration_ms: 1200 },
+            { attempt: 2, maxAttempts: 3, agent: 'sre', strategy: 'Alternate fix — pin exact version numpy==1.24.4', outcome: 'failure', confidence: 0.62, duration_ms: 800 },
+            { attempt: 3, maxAttempts: 3, agent: 'sre', strategy: 'Reflection-based — update requirements.txt with range constraint', outcome: 'success', confidence: 0.91, duration_ms: 950 },
+          ]}
+        />
       </GlassCard>
     </div>
   );

@@ -16,8 +16,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 from collections import defaultdict
 
+from logging_config import get_logger
 from models.agents import AgentAction
 from models.workflows import Workflow, WorkflowStatus, TaskStatus
+
+log = get_logger("telemetry")
 
 
 class TelemetryCollector:
@@ -66,11 +69,11 @@ class TelemetryCollector:
 
     async def initialize(self):
         """Initialize telemetry system."""
-        print("  📊 Telemetry collector initialized")
+        log.info("telemetry_initialized")
 
     async def shutdown(self):
         """Shutdown telemetry system."""
-        print(f"  📊 Telemetry shutdown. Events logged: {len(self._events)}")
+        log.info("telemetry_shutdown", events_logged=len(self._events))
 
     # ─── Event Logging ───
 
@@ -93,6 +96,13 @@ class TelemetryCollector:
         # Cap activity feed size
         if len(self._activity_feed) > 200:
             self._activity_feed = self._activity_feed[:200]
+
+        # Broadcast via WebSocket (best-effort)
+        try:
+            from api.websocket import broadcast_activity
+            await broadcast_activity(event_type, str(data.get("workflow_id", data.get("agent", "")))[:100])
+        except Exception:
+            pass
 
     async def log_agent_action(self, action: AgentAction):
         """Log an agent action."""

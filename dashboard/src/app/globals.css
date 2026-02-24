@@ -2,10 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ─── Dark Theme (default) ─── */
+:root,
+.dark {
   --foreground-rgb: 255, 255, 255;
   --background-start-rgb: 15, 23, 42;
   --background-end-rgb: 2, 6, 23;
+  --surface-bg: rgba(30, 41, 59, 0.6);
+  --surface-border: rgba(99, 102, 241, 0.15);
+  --text-primary: rgba(255, 255, 255, 0.9);
+  --text-secondary: rgba(226, 232, 240, 0.6);
+  --text-muted: rgba(226, 232, 240, 0.4);
+}
+
+/* ─── Light Theme ─── */
+.light {
+  --foreground-rgb: 15, 23, 42;
+  --background-start-rgb: 248, 250, 252;
+  --background-end-rgb: 241, 245, 249;
+  --surface-bg: rgba(255, 255, 255, 0.8);
+  --surface-border: rgba(99, 102, 241, 0.2);
+  --text-primary: rgba(15, 23, 42, 0.9);
+  --text-secondary: rgba(51, 65, 85, 0.7);
+  --text-muted: rgba(100, 116, 139, 0.6);
 }
 
 body {
@@ -85,9 +104,26 @@ body {
 
 /* Card glass effect */
 .glass-card {
-  background: rgba(30, 41, 59, 0.6);
+  background: var(--surface-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  border: 1px solid var(--surface-border);
+}
+
+/* Light theme specific overrides */
+.light .glass-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.light ::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.5);
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+.light .react-flow__background {
+  background: rgba(248, 250, 252, 0.5);
 }
 
 /* Metric number animation */

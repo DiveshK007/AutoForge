@@ -3,7 +3,7 @@ AutoForge configuration module.
 Loads environment variables and provides typed settings.
 """
 
-from typing import Optional
+from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 
@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     DEMO_MODE: bool = True  # Deterministic demo mode — precomputed reasoning, no LLM calls
 
+    # ─── Authentication ───
+    API_KEYS: List[str] = []  # Additional valid API keys (SECRET_KEY is always valid)
+    JWT_SECRET: str = "jwt-dev-secret-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60
+
+    # ─── Rate Limiting ───
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_DEFAULT_RPM: int = 60  # requests per minute
+
     # ─── Agent Configuration ───
     AGENT_MAX_RETRIES: int = 3
     AGENT_TIMEOUT_SECONDS: int = 120
@@ -55,6 +65,23 @@ class Settings(BaseSettings):
     GREENOPS_CARBON_FACTOR: float = 0.000475
     GREENOPS_CPU_POWER_DRAW: float = 65.0
     GREENOPS_MEMORY_POWER_DRAW: float = 0.3
+
+    # ─── Observability ───
+    OTEL_ENABLED: bool = False
+    OTEL_EXPORTER_ENDPOINT: str = "http://localhost:4317"
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV == "production"
+
+    @property
+    def all_api_keys(self) -> set:
+        """All valid API keys including SECRET_KEY."""
+        keys = {self.SECRET_KEY}
+        keys.update(self.API_KEYS)
+        if self.DEMO_MODE:
+            keys.add("demo")
+        return keys
 
 
 settings = Settings()
