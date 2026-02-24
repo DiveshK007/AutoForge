@@ -181,7 +181,7 @@ async def get_dashboard_overview(request: Request):
     from config import settings
 
     # In demo mode with no real workflows yet, return rich precomputed data
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return {
@@ -239,7 +239,7 @@ async def get_dashboard_agents(request: Request):
     brain = request.app.state.brain
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return {"agents": _DEMO_AGENTS, "count": len(_DEMO_AGENTS)}
@@ -289,7 +289,7 @@ async def get_activity_feed(request: Request, limit: int = 50):
 
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return _DEMO_ACTIVITY[:limit]
@@ -357,7 +357,7 @@ async def get_learning_dashboard(request: Request):
 
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return {
@@ -385,7 +385,7 @@ async def get_carbon_dashboard(request: Request):
 
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return {

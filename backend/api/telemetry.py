@@ -51,7 +51,7 @@ async def get_metrics_history(request: Request, hours: int = 24):
 
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return _DEMO_METRICS_HISTORY
@@ -124,7 +124,7 @@ async def get_reasoning_trees(request: Request, limit: int = 10):
 
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return _demo_reasoning_trees()
@@ -149,7 +149,7 @@ async def get_learning_curve(request: Request):
 
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
-    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+    use_demo = settings.DEMO_MODE
 
     if use_demo:
         return _DEMO_LEARNING_CURVE
