@@ -133,6 +133,50 @@ export interface LearningDashboard {
   meta_intelligence_score: number;
 }
 
+export interface RetryEvent {
+  attempt: number;
+  maxAttempts: number;
+  agent: string;
+  strategy: string;
+  outcome: 'success' | 'failure' | 'pending';
+  confidence?: number;
+  duration_ms?: number;
+}
+
+export interface RetryData {
+  workflow_id: string;
+  retries: RetryEvent[];
+}
+
+export interface CommLink {
+  from: string;
+  to: string;
+  dataType: string;
+  volume: number;
+}
+
+export interface AgentCommunicationData {
+  workflow_id: string;
+  agents: string[];
+  links: CommLink[];
+  context: Record<string, Record<string, unknown>>;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  roles: string[];
+}
+
+export interface AuthInfo {
+  authenticated: boolean;
+  method: string;
+  principal: string;
+  roles: string[];
+  request_id: string;
+}
+
 /* ─── Fetch Helpers ───────────────────────────────────── */
 
 async function fetchAPI<T>(endpoint: string): Promise<T> {
@@ -201,4 +245,24 @@ export const api = {
       capabilities: string[];
       explanation: string;
     }>(`/api/v1/explain/agent/${agentType}`),
+
+  // Retry & Communication (real endpoints)
+  getRetries: (workflowId: string) =>
+    fetchAPI<RetryData>(`/api/v1/dashboard/retries/${workflowId}`),
+
+  getAgentCommunication: (workflowId: string) =>
+    fetchAPI<AgentCommunicationData>(`/api/v1/dashboard/communication/${workflowId}`),
+
+  // Auth
+  login: (username: string, password: string) =>
+    fetch(`${API_BASE}/api/v1/auth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }).then((r) => {
+      if (!r.ok) throw new Error('Invalid credentials');
+      return r.json() as Promise<TokenResponse>;
+    }),
+
+  getAuthInfo: () => fetchAPI<AuthInfo>('/api/v1/auth/me'),
 };

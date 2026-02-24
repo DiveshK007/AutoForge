@@ -10,6 +10,8 @@ import type {
   ReasoningVisualization,
   CarbonDashboard,
   LearningDashboard,
+  RetryEvent,
+  CommLink,
 } from '@/lib/api';
 import { formatPercentage, formatDuration } from '@/lib/utils';
 
@@ -54,6 +56,9 @@ function DashboardContent() {
   const [selectedTree, setSelectedTree] = useState<string>('');
   const [carbonData, setCarbonData] = useState<CarbonDashboard | null>(null);
   const [learningDash, setLearningDash] = useState<LearningDashboard | null>(null);
+  const [retryData, setRetryData] = useState<RetryEvent[]>([]);
+  const [commAgents, setCommAgents] = useState<string[]>([]);
+  const [commLinks, setCommLinks] = useState<CommLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,7 +74,7 @@ function DashboardContent() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [dash, act, hist, learn, reason, carbon, learnDash] = await Promise.allSettled([
+      const [dash, act, hist, learn, reason, carbon, learnDash, retries, comm] = await Promise.allSettled([
         api.getDashboard(),
         api.getActivityFeed(),
         api.getMetricsHistory(),
@@ -77,6 +82,8 @@ function DashboardContent() {
         api.getReasoningTrees(),
         api.getCarbonDashboard(),
         api.getLearningDashboard(),
+        api.getRetries('latest'),
+        api.getAgentCommunication('latest'),
       ]);
 
       if (dash.status === 'fulfilled') setDashboard(dash.value);
@@ -85,6 +92,11 @@ function DashboardContent() {
       if (learn.status === 'fulfilled') setLearningCurve(learn.value);
       if (carbon.status === 'fulfilled') setCarbonData(carbon.value);
       if (learnDash.status === 'fulfilled') setLearningDash(learnDash.value);
+      if (retries.status === 'fulfilled') setRetryData(retries.value.retries || []);
+      if (comm.status === 'fulfilled') {
+        setCommAgents(comm.value.agents || []);
+        setCommLinks(comm.value.links || []);
+      }
       if (reason.status === 'fulfilled') {
         const trees = reason.value;
         setAllTrees(trees);
@@ -222,7 +234,7 @@ function DashboardContent() {
 
         {activeTab === 'agents' && (
           <SafeComponent fallbackMessage="Agents tab encountered an error">
-            <AgentsTab dashboard={dashboard} />
+            <AgentsTab dashboard={dashboard} commAgents={commAgents} commLinks={commLinks} />
           </SafeComponent>
         )}
 
@@ -262,7 +274,7 @@ function DashboardContent() {
 
         {activeTab === 'workflows' && (
           <SafeComponent fallbackMessage="Workflows tab encountered an error">
-            <WorkflowsTab dashboard={dashboard} />
+            <WorkflowsTab dashboard={dashboard} retryData={retryData} />
           </SafeComponent>
         )}
       </main>
@@ -372,10 +384,14 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
   );
 }
 
-function AgentsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
+function AgentsTab({ dashboard, commAgents, commLinks }: { dashboard: DashboardOverview | null; commAgents: string[]; commLinks: CommLink[] }) {
   const agents = dashboard?.agents ?? [];
   const totalTasks = agents.reduce((s, a) => s + a.tasks_completed, 0);
   const avgSuccess = agents.length > 0 ? agents.reduce((s, a) => s + a.success_rate, 0) / agents.length : 0;
+
+  // Use real API data if available, fall back to demo constants
+  const graphAgents = commAgents.length > 0 ? commAgents : agents.map(a => a.type);
+  const graphLinks = commLinks.length > 0 ? commLinks : DEMO_COMM_LINKS;
 
   return (
     <div className="space-y-6">
@@ -395,12 +411,12 @@ function AgentsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
         <CollaborationMatrix agents={agents} />
       </GlassCard>
 
-      {/* Agent Communication Graph */}
+      {/* Agent Communication Graph — wired to real API data */}
       <SafeComponent fallbackMessage="Communication graph could not be loaded">
         <GlassCard title="Agent Communication Flow" icon="🔀" subtitle="Real-time data flow between agents via shared context bus">
           <AgentCommGraph
-            agents={agents.map(a => a.type)}
-            links={DEMO_COMM_LINKS}
+            agents={graphAgents}
+            links={graphLinks}
           />
         </GlassCard>
       </SafeComponent>
@@ -645,7 +661,7 @@ function SustainabilityTab({
   );
 }
 
-function WorkflowsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
+function WorkflowsTab({ dashboard, retryData }: { dashboard: DashboardOverview | null; retryData: RetryEvent[] }) {
   // Example DAG tasks for visualization
   const demoTasks = [
     { task_id: 'sre-1', agent_type: 'sre', action: 'diagnose root cause', status: 'completed', dependencies: [] },
@@ -662,6 +678,14 @@ function WorkflowsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
     qa: { tests_generated: 3, coverage_delta: '+4.2%', test_files: ['test_numpy_import.py', 'test_data_processing.py'] },
     greenops: { energy_kwh: 0.0108, carbon_kg: 0.000005, efficiency_score: 85 },
   };
+
+  // Use real retry data from API if available, fall back to demo retries
+  const fallbackRetries: RetryEvent[] = [
+    { attempt: 1, maxAttempts: 3, agent: 'sre', strategy: 'Original diagnosis — missing dependency', outcome: 'failure', confidence: 0.45, duration_ms: 1200 },
+    { attempt: 2, maxAttempts: 3, agent: 'sre', strategy: 'Alternate fix — pin exact version numpy==1.24.4', outcome: 'failure', confidence: 0.62, duration_ms: 800 },
+    { attempt: 3, maxAttempts: 3, agent: 'sre', strategy: 'Reflection-based — update requirements.txt with range constraint', outcome: 'success', confidence: 0.91, duration_ms: 950 },
+  ];
+  const retries = retryData.length > 0 ? retryData : fallbackRetries;
 
   return (
     <div className="space-y-6">
@@ -709,15 +733,9 @@ function WorkflowsTab({ dashboard }: { dashboard: DashboardOverview | null }) {
         <DemoTrigger />
       </GlassCard>
 
-      {/* Retry Visualization */}
+      {/* Retry Visualization — wired to real API data */}
       <GlassCard title="Self-Correction Timeline" icon="🔄" subtitle="Agent retry and escalation history">
-        <RetryTimeline
-          retries={[
-            { attempt: 1, maxAttempts: 3, agent: 'sre', strategy: 'Original diagnosis — missing dependency', outcome: 'failure', confidence: 0.45, duration_ms: 1200 },
-            { attempt: 2, maxAttempts: 3, agent: 'sre', strategy: 'Alternate fix — pin exact version numpy==1.24.4', outcome: 'failure', confidence: 0.62, duration_ms: 800 },
-            { attempt: 3, maxAttempts: 3, agent: 'sre', strategy: 'Reflection-based — update requirements.txt with range constraint', outcome: 'success', confidence: 0.91, duration_ms: 950 },
-          ]}
-        />
+        <RetryTimeline retries={retries} />
       </GlassCard>
     </div>
   );

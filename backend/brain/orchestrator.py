@@ -333,26 +333,50 @@ class CommandBrain:
     ) -> bool:
         """
         Retry strategy with escalation: retry → alternate fix → manual review.
+        Records real retry history for dashboard visualization.
         Returns True if self-correction succeeded.
         """
         max_retries = settings.AGENT_MAX_RETRIES
         if not self._should_retry(task) or max_retries < 1:
             return False
 
+        # Initialize retry history on workflow if not present
+        if not hasattr(workflow, '_retry_history'):
+            workflow._retry_history = []
+
         for attempt in range(1, max_retries + 1):
+            strategy = f"Alternate strategy attempt {attempt}/{max_retries}"
             workflow.add_timeline_entry(
                 "self_correction",
                 agent=task.agent_type,
                 detail=f"Retry attempt {attempt}/{max_retries} — alternate strategy",
             )
+
+            import time
+            start_ms = time.monotonic()
+
             try:
                 retry_result = await agent.retry_with_reflection(task, workflow, task.error or "")
+                duration_ms = int((time.monotonic() - start_ms) * 1000)
+
                 if retry_result.get("success"):
                     task.status = TaskStatus.COMPLETED
                     task.output_data = retry_result.get("output", {})
                     task.output_data["self_corrected"] = True
                     task.confidence = retry_result.get("confidence", 0.0)
                     task.completed_at = datetime.now(timezone.utc)
+
+                    # Record successful retry
+                    workflow._retry_history.append({
+                        "attempt": attempt,
+                        "maxAttempts": max_retries,
+                        "agent": task.agent_type,
+                        "strategy": retry_result.get("strategy", strategy),
+                        "outcome": "success",
+                        "confidence": task.confidence,
+                        "duration_ms": duration_ms,
+                    })
+
                     workflow.add_timeline_entry(
                         "self_correction_success",
                         agent=task.agent_type,
@@ -360,8 +384,28 @@ class CommandBrain:
                         confidence=task.confidence,
                     )
                     return True
-            except Exception:
-                pass
+                else:
+                    # Record failed retry
+                    workflow._retry_history.append({
+                        "attempt": attempt,
+                        "maxAttempts": max_retries,
+                        "agent": task.agent_type,
+                        "strategy": retry_result.get("strategy", strategy),
+                        "outcome": "failure",
+                        "confidence": retry_result.get("confidence", 0.0),
+                        "duration_ms": duration_ms,
+                    })
+            except Exception as exc:
+                duration_ms = int((time.monotonic() - start_ms) * 1000)
+                workflow._retry_history.append({
+                    "attempt": attempt,
+                    "maxAttempts": max_retries,
+                    "agent": task.agent_type,
+                    "strategy": strategy,
+                    "outcome": "failure",
+                    "confidence": 0.0,
+                    "duration_ms": duration_ms,
+                })
 
         # Escalation: mark for manual review
         workflow.add_timeline_entry(
@@ -442,3 +486,51 @@ class CommandBrain:
             workflow.add_timeline_entry("workflow_cancelled", detail="Cancelled by user")
             return True
         return False
+
+    def get_retry_history(self, workflow_id: str) -> List[Dict[str, Any]]:
+        """Get retry history for a workflow (real data from _retry_with_escalation)."""
+        workflow = self.state_manager.get_workflow(workflow_id)
+        if not workflow:
+            return []
+        return getattr(workflow, '_retry_history', [])
+
+    def get_agent_communication(self, workflow_id: str) -> Dict[str, Any]:
+        """Get agent-to-agent communication data from the shared context bus."""
+        workflow = self.state_manager.get_workflow(workflow_id)
+        if not workflow:
+            return {"agents": [], "links": [], "context": {}}
+
+        # Build communication graph from shared context
+        agents = list(set(workflow.agents_involved))
+        links = []
+        context = {}
+
+        for agent_type, data in workflow.shared_context.items():
+            if isinstance(data, dict):
+                context[agent_type] = data
+                # Build links: each consuming agent that depends on this agent's output
+                for task in workflow.tasks:
+                    if task.agent_type != agent_type:
+                        # Check if this task consumed context from agent_type
+                        shared_in_input = task.input_data.get("_shared_context", {})
+                        if agent_type in str(shared_in_input) or any(
+                            d_task.agent_type == agent_type
+                            for d_task in workflow.tasks
+                            if d_task.task_id in task.dependencies
+                        ):
+                            # Determine data type exchanged
+                            data_keys = list(data.keys()) if isinstance(data, dict) else []
+                            data_type = data_keys[0] if data_keys else "context"
+                            volume = min(1.0, len(data_keys) / 5.0) if data_keys else 0.3
+                            links.append({
+                                "from": agent_type,
+                                "to": task.agent_type,
+                                "dataType": data_type,
+                                "volume": round(volume, 2),
+                            })
+
+        return {
+            "agents": agents,
+            "links": links,
+            "context": context,
+        }

@@ -5,6 +5,8 @@ In production, this handles heavy agent workloads asynchronously.
 In DEMO_MODE, the brain processes everything in-process via asyncio.
 """
 
+import asyncio
+
 from celery import Celery
 
 from config import settings
@@ -38,26 +40,53 @@ celery_app.conf.update(
 )
 
 
+def _get_or_create_event_loop():
+    """Get the running event loop or create a new one for sync Celery context."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
+
 @celery_app.task(name="autoforge.process_event", bind=True, max_retries=3)
 def process_event_task(self, event_data: dict):
     """
-    Process a GitLab event asynchronously.
+    Process a GitLab event asynchronously via Celery.
 
-    In production, this is dispatched from the webhook endpoint
-    to offload heavy LLM calls from the API server.
+    Dispatched from the webhook endpoint in production mode.
+    Creates a CommandBrain, hydrates the event, and runs the full pipeline.
     """
     log.info("celery_process_event", event=event_data.get("event_type", "unknown"))
     try:
-        # Import here to avoid circular imports at module level
-        import asyncio
         from models.events import NormalizedEvent, EventType
         from brain.orchestrator import CommandBrain
+        from memory.store import MemoryStore
+        from telemetry.collector import TelemetryCollector
 
+        # Build a minimal brain with memory + telemetry
         brain = CommandBrain()
+        memory = MemoryStore()
+        telemetry = TelemetryCollector()
+
+        loop = _get_or_create_event_loop()
+        loop.run_until_complete(memory.initialize())
+        loop.run_until_complete(telemetry.initialize())
+        brain.set_memory(memory)
+        brain.set_telemetry(telemetry)
+
+        # Hydrate normalized event
         normalized = NormalizedEvent(**event_data)
-        workflow_id = asyncio.get_event_loop().run_until_complete(
-            brain.ingest_event(normalized)
-        )
+
+        # Run the full workflow pipeline
+        workflow_id = loop.run_until_complete(brain.ingest_event(normalized))
+
+        # Cleanup
+        loop.run_until_complete(memory.shutdown())
+        loop.run_until_complete(telemetry.shutdown())
+
+        log.info("celery_process_event_done", workflow_id=workflow_id)
         return {"status": "processed", "workflow_id": workflow_id}
     except Exception as exc:
         log.error("celery_process_event_failed", error=str(exc))
@@ -66,10 +95,35 @@ def process_event_task(self, event_data: dict):
 
 @celery_app.task(name="autoforge.execute_agent", bind=True, max_retries=3)
 def execute_agent_task(self, agent_type: str, task_data: dict):
-    """Execute a single agent task asynchronously."""
+    """Execute a single agent task asynchronously via Celery."""
     log.info("celery_execute_agent", agent=agent_type)
     try:
-        return {"status": "executed", "agent": agent_type, "task": task_data}
+        from brain.orchestrator import CommandBrain
+
+        brain = CommandBrain()
+        agent = brain.get_agent(agent_type)
+        if not agent:
+            return {"status": "error", "error": f"Unknown agent: {agent_type}"}
+
+        # Build a minimal AgentTask
+        from models.workflows import AgentTask, Workflow
+        task = AgentTask(
+            workflow_id=task_data.get("workflow_id", "celery-task"),
+            agent_type=agent_type,
+            action=task_data.get("action", "execute"),
+            input_data=task_data.get("input_data", {}),
+        )
+        workflow = Workflow(
+            workflow_id=task_data.get("workflow_id", "celery-task"),
+            event_type=task_data.get("event_type", "unknown"),
+            project_id=task_data.get("project_id", "unknown"),
+        )
+
+        loop = _get_or_create_event_loop()
+        result = loop.run_until_complete(agent.execute(task, workflow))
+
+        log.info("celery_execute_agent_done", agent=agent_type, confidence=result.get("confidence", 0))
+        return {"status": "executed", "agent": agent_type, "result": result}
     except Exception as exc:
         log.error("celery_execute_agent_failed", agent=agent_type, error=str(exc))
         raise self.retry(exc=exc, countdown=10 * (self.request.retries + 1))

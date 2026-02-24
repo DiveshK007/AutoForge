@@ -405,3 +405,64 @@ async def get_carbon_dashboard(request: Request):
         "pipeline_efficiency": metrics.get("pipeline_efficiency", 0.0),
         "optimization_count": metrics.get("optimizations", 0),
     }
+
+
+# ─── Retry Timeline Endpoint ────────────────────────────────────────
+
+_DEMO_RETRIES = [
+    {"attempt": 1, "maxAttempts": 3, "agent": "sre", "strategy": "Original diagnosis — missing dependency", "outcome": "failure", "confidence": 0.45, "duration_ms": 1200},
+    {"attempt": 2, "maxAttempts": 3, "agent": "sre", "strategy": "Alternate fix — pin exact version numpy==1.24.4", "outcome": "failure", "confidence": 0.62, "duration_ms": 800},
+    {"attempt": 3, "maxAttempts": 3, "agent": "sre", "strategy": "Reflection-based — update requirements.txt with range constraint", "outcome": "success", "confidence": 0.91, "duration_ms": 950},
+]
+
+
+@router.get("/retries/{workflow_id}")
+async def get_workflow_retries(workflow_id: str, request: Request):
+    """Get retry / self-correction history for a workflow."""
+    from config import settings
+
+    brain = request.app.state.brain
+
+    if settings.DEMO_MODE:
+        return {"workflow_id": workflow_id, "retries": _DEMO_RETRIES}
+
+    retries = brain.get_retry_history(workflow_id)
+    return {"workflow_id": workflow_id, "retries": retries}
+
+
+# ─── Agent Communication Endpoint ───────────────────────────────
+
+_DEMO_COMM_DATA = {
+    "agents": ["sre", "security", "qa", "review", "docs", "greenops"],
+    "links": [
+        {"from": "sre", "to": "security", "dataType": "fix_patch", "volume": 0.9},
+        {"from": "sre", "to": "qa", "dataType": "fix_branch", "volume": 0.85},
+        {"from": "sre", "to": "greenops", "dataType": "pipeline_data", "volume": 0.5},
+        {"from": "security", "to": "review", "dataType": "scan_result", "volume": 0.7},
+        {"from": "security", "to": "qa", "dataType": "vuln_context", "volume": 0.4},
+        {"from": "qa", "to": "review", "dataType": "test_results", "volume": 0.8},
+        {"from": "qa", "to": "docs", "dataType": "coverage_report", "volume": 0.5},
+        {"from": "review", "to": "docs", "dataType": "review_notes", "volume": 0.75},
+        {"from": "greenops", "to": "review", "dataType": "energy_report", "volume": 0.6},
+    ],
+    "context": {
+        "sre": {"root_cause": "missing numpy dependency", "fix_branch": "autoforge/fix-pipeline-abc123", "confidence": 0.92},
+        "security": {"scan_result": "clean", "cve_count": 0},
+        "qa": {"tests_generated": 3, "coverage_delta": "+4.2%"},
+        "greenops": {"energy_kwh": 0.0108, "carbon_kg": 0.000005},
+    },
+}
+
+
+@router.get("/communication/{workflow_id}")
+async def get_agent_communication(workflow_id: str, request: Request):
+    """Get agent-to-agent communication graph data for a workflow."""
+    from config import settings
+
+    brain = request.app.state.brain
+
+    if settings.DEMO_MODE:
+        return {"workflow_id": workflow_id, **_DEMO_COMM_DATA}
+
+    comm = brain.get_agent_communication(workflow_id)
+    return {"workflow_id": workflow_id, **comm}

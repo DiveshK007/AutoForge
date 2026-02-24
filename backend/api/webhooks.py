@@ -1,6 +1,9 @@
 """
 AutoForge Webhook API — GitLab event ingestion endpoints.
 Receives pipeline, merge request, and security events from GitLab.
+
+In production mode (DEMO_MODE=False), heavy processing is dispatched
+to Celery workers. In demo mode, events are processed in-process.
 """
 
 import hashlib
@@ -17,9 +20,19 @@ from models.events import (
     NormalizedEvent,
     EventType,
 )
+from logging_config import get_logger
 
 router = APIRouter()
 normalizer = EventNormalizer()
+log = get_logger("webhooks")
+
+
+def _dispatch_to_celery(event_data: dict) -> str:
+    """Dispatch event processing to Celery worker. Returns task ID."""
+    from worker import process_event_task
+    result = process_event_task.delay(event_data)
+    log.info("celery_dispatched", celery_task_id=result.id, event_type=event_data.get("event_type"))
+    return result.id
 
 
 @router.post("/gitlab")
@@ -58,7 +71,18 @@ async def receive_gitlab_webhook(
     if normalized is None:
         return {"status": "ignored", "reason": "Event type not actionable"}
 
-    # ─── Route to Command Brain ───
+    # ─── Route: Celery (production) vs in-process (demo) ───
+    if not settings.DEMO_MODE and _celery_available():
+        celery_task_id = _dispatch_to_celery(normalized.model_dump(mode="json"))
+        return {
+            "status": "accepted",
+            "dispatch": "celery",
+            "celery_task_id": celery_task_id,
+            "event_type": normalized.event_type.value,
+            "timestamp": normalized.timestamp.isoformat(),
+        }
+
+    # In-process (demo or Celery unavailable)
     workflow_id = await brain.ingest_event(normalized)
 
     return {
@@ -108,6 +132,18 @@ async def test_trigger(request: Request):
         timestamp=datetime.now(timezone.utc),
     )
 
+    # ─── Route: Celery (production) vs in-process ───
+    from config import settings
+    if not settings.DEMO_MODE and _celery_available():
+        celery_task_id = _dispatch_to_celery(normalized.model_dump(mode="json"))
+        return {
+            "status": "triggered",
+            "dispatch": "celery",
+            "celery_task_id": celery_task_id,
+            "event_type": event_type,
+            "scenario": scenario or event_type,
+        }
+
     workflow_id = await brain.ingest_event(normalized)
 
     return {
@@ -116,3 +152,15 @@ async def test_trigger(request: Request):
         "event_type": event_type,
         "scenario": scenario or event_type,
     }
+
+
+def _celery_available() -> bool:
+    """Check if Celery broker is reachable."""
+    try:
+        from worker import celery_app
+        conn = celery_app.connection()
+        conn.ensure_connection(max_retries=0, timeout=1)
+        conn.close()
+        return True
+    except Exception:
+        return False

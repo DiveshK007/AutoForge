@@ -2,11 +2,12 @@
 AutoForge Memory Store — Hybrid memory system for agent learning.
 
 Implements:
-- Short-term memory: Active workflow state
-- Long-term memory: Failure patterns, fix outcomes
-- Skill graph: Reusable remediation strategies
+- Short-term memory: Active workflow state (in-memory — fast)
+- Long-term memory: Failure patterns, fix outcomes (PostgreSQL-backed)
+- Skill graph: Reusable remediation strategies (PostgreSQL-backed)
 - Semantic memory: Abstract pattern categories for cross-agent knowledge sharing
-- Policy learning: Tracks policy violations and adapts thresholds
+- Policy learning: Tracks policy violations and adapts thresholds (PostgreSQL-backed)
+- Redis cache: Hot-path reads skip DB round-trips
 """
 
 import json
@@ -16,6 +17,9 @@ from collections import defaultdict
 
 from models.agents import AgentExperience
 from models.workflows import Workflow
+from logging_config import get_logger
+
+log = get_logger("memory")
 
 
 class MemoryStore:
@@ -24,17 +28,20 @@ class MemoryStore:
 
     Memory layers:
     1. Short-term — Active task context (in-memory)
-    2. Long-term — Historical patterns (persistent)
-    3. Skill graph — Reusable strategies (derived)
-    4. Semantic — Abstract pattern categories (cross-agent)
-    5. Policy — Learning from governance decisions
+    2. Long-term — Historical patterns (in-memory + PostgreSQL)
+    3. Skill graph — Reusable strategies (in-memory + PostgreSQL)
+    4. Semantic — Abstract pattern categories (in-memory)
+    5. Policy — Learning from governance decisions (in-memory + PostgreSQL)
+    6. Redis cache — Hot-path acceleration
+
+    When PostgreSQL/Redis are unavailable, falls back to pure in-memory mode.
     """
 
     def __init__(self):
         # Short-term memory
         self._active_contexts: Dict[str, Any] = {}
 
-        # Long-term memory
+        # Long-term memory (in-memory layer — always populated)
         self._experiences: List[AgentExperience] = []
         self._failure_patterns: Dict[str, List[Dict]] = defaultdict(list)
         self._fix_outcomes: Dict[str, List[Dict]] = defaultdict(list)
@@ -58,31 +65,76 @@ class MemoryStore:
         self._knowledge_reuse_count = 0
         self._cross_agent_shares = 0
 
+        # Persistence flags
+        self._db_available = False
+        self._redis_available = False
+
     async def initialize(self):
-        """Initialize memory stores."""
-        print("  🧠 Memory store initialized (in-memory mode with semantic + policy layers)")
+        """Initialize memory stores — attempt DB & Redis, fall back to in-memory."""
+        from config import settings
+
+        # ─── PostgreSQL ───
+        if not settings.DEMO_MODE:
+            try:
+                from db.engine import init_db, get_engine
+                from db import repository
+                await init_db()
+                repository.set_db_available(True)
+                self._db_available = True
+                log.info("memory_db_connected")
+            except Exception as exc:
+                log.warning("memory_db_unavailable", error=str(exc))
+
+        # ─── Redis Cache ───
+        if not settings.DEMO_MODE:
+            try:
+                from db import redis_cache
+                await redis_cache.init_redis()
+                self._redis_available = redis_cache.is_available()
+            except Exception as exc:
+                log.warning("memory_redis_unavailable", error=str(exc))
+
+        mode_parts = ["in-memory"]
+        if self._db_available:
+            mode_parts.append("PostgreSQL")
+        if self._redis_available:
+            mode_parts.append("Redis")
+        mode_str = " + ".join(mode_parts)
+        print(f"  🧠 Memory store initialized ({mode_str} with semantic + policy layers)")
 
     async def shutdown(self):
         """Gracefully shutdown memory stores."""
+        if self._redis_available:
+            try:
+                from db import redis_cache
+                await redis_cache.close_redis()
+            except Exception:
+                pass
+        if self._db_available:
+            try:
+                from db.engine import close_db
+                await close_db()
+            except Exception:
+                pass
         print(f"  🧠 Memory store shutdown. Experiences: {len(self._experiences)}, Skills: {len(self._skills)}, Semantic patterns: {sum(len(v) for v in self._semantic_patterns.values())}")
 
     # ─── Experience Storage ───
 
     async def store_experience(self, experience: AgentExperience):
-        """Store an agent experience in long-term memory."""
+        """Store an agent experience in long-term memory + PostgreSQL + Redis."""
+        # ─── In-memory (always) ───
         self._experiences.append(experience)
 
-        # Index by failure type
-        self._failure_patterns[experience.failure_type].append({
+        pattern_entry = {
             "agent": experience.agent_type,
             "action": experience.action_taken,
             "success": experience.success,
             "confidence": experience.confidence,
             "fix_time": experience.fix_time_seconds,
             "timestamp": experience.timestamp.isoformat(),
-        })
+        }
+        self._failure_patterns[experience.failure_type].append(pattern_entry)
 
-        # Track fix outcomes
         outcome_key = f"{experience.agent_type}:{experience.action_taken}"
         self._fix_outcomes[outcome_key].append({
             "success": experience.success,
@@ -99,6 +151,34 @@ class MemoryStore:
 
         # Share knowledge cross-agent
         await self._share_knowledge(experience)
+
+        # ─── PostgreSQL persistence (async, best-effort) ───
+        if self._db_available:
+            try:
+                from db import repository
+                await repository.save_experience({
+                    "id": experience.experience_id,
+                    "agent_type": experience.agent_type,
+                    "failure_type": experience.failure_type,
+                    "context_summary": experience.context_summary,
+                    "action_taken": experience.action_taken,
+                    "outcome": experience.outcome,
+                    "success": experience.success,
+                    "confidence": experience.confidence,
+                    "fix_time_seconds": experience.fix_time_seconds,
+                    "reusable_skill": experience.reusable_skill,
+                })
+            except Exception as exc:
+                log.warning("db_persist_experience_failed", error=str(exc))
+
+        # ─── Redis cache invalidation ───
+        if self._redis_available:
+            try:
+                from db import redis_cache
+                await redis_cache.cache_delete(f"failures:{experience.failure_type}")
+                await redis_cache.cache_incr("stats:total_experiences")
+            except Exception:
+                pass
 
     async def store_workflow_experience(self, workflow: Workflow):
         """Store a complete workflow as an experience."""
@@ -120,6 +200,8 @@ class MemoryStore:
         """
         Recall relevant prior knowledge for an agent task.
 
+        Priority: Redis cache → in-memory → PostgreSQL fallback.
+
         Searches:
         1. Similar failure patterns
         2. Successful fix strategies
@@ -133,22 +215,42 @@ class MemoryStore:
         event_type = context.get("event_type", "")
         error_logs = context.get("error_logs", "")
 
-        # Find similar failures
+        # ─── 1. Find similar failures (cache → memory → DB) ───
         if event_type:
             similar = self._failure_patterns.get(event_type, [])
+
+            # If in-memory is empty but DB available, try loading from DB
+            if not similar and self._db_available:
+                try:
+                    from db import repository
+                    similar = await repository.load_experiences_by_failure(event_type, limit=50)
+                    if similar:
+                        self._failure_patterns[event_type] = similar
+                except Exception:
+                    pass
+
             if similar:
-                successful = [s for s in similar if s["success"]]
-                result["similar_fixes"] = successful[-5:]  # Last 5 successful
+                successful = [s for s in similar if s.get("success")]
+                result["similar_fixes"] = successful[-5:]
                 result["failure_count"] = len(similar)
                 result["success_rate"] = len(successful) / max(len(similar), 1)
                 self._knowledge_reuse_count += 1
 
-        # Find relevant skills
+        # ─── 2. Find relevant skills (cache → memory → DB) ───
         relevant_skills = self._find_relevant_skills(agent_type, event_type)
+
+        # If no in-memory skills but DB available, try loading
+        if not relevant_skills and self._db_available:
+            try:
+                from db import repository
+                relevant_skills = await repository.load_skills_for_agent(agent_type)
+            except Exception:
+                pass
+
         if relevant_skills:
             result["relevant_skills"] = relevant_skills
 
-        # Get agent-specific fix history
+        # ─── 3. Agent-specific fix history ───
         action = context.get("action", "")
         outcome_key = f"{agent_type}:{action}"
         if outcome_key in self._fix_outcomes:
@@ -158,13 +260,13 @@ class MemoryStore:
                 sum(1 for o in outcomes if o["success"]) / max(len(outcomes), 1)
             )
 
-        # Semantic pattern recall
+        # ─── 4. Semantic pattern recall ───
         if event_type:
             semantic = self._semantic_patterns.get(event_type, [])
             if semantic:
                 result["semantic_patterns"] = semantic[-5:]
 
-        # Cross-agent shared knowledge
+        # ─── 5. Cross-agent shared knowledge ───
         shared = self._shared_knowledge.get(agent_type, [])
         if shared:
             result["cross_agent_knowledge"] = shared[-5:]
@@ -174,7 +276,7 @@ class MemoryStore:
     # ─── Skill Management ───
 
     async def _extract_skill(self, experience: AgentExperience):
-        """Extract a reusable skill from a successful experience."""
+        """Extract a reusable skill from a successful experience and persist."""
         skill_key = f"{experience.agent_type}:{experience.reusable_skill}"
         if skill_key not in self._skills:
             self._skills[skill_key] = {
@@ -205,6 +307,22 @@ class MemoryStore:
         self._skill_success_rates[skill_key] = (
             skill["success_count"] / skill["usage_count"]
         )
+
+        # ─── Persist skill to DB ───
+        if self._db_available:
+            try:
+                from db import repository
+                await repository.upsert_skill(skill_key, {
+                    "name": skill["name"],
+                    "agent_type": skill["agent_type"],
+                    "description": skill["description"],
+                    "usage_count": skill["usage_count"],
+                    "success_count": skill["success_count"],
+                    "avg_confidence": skill["avg_confidence"],
+                    "avg_fix_time": skill["avg_fix_time"],
+                })
+            except Exception as exc:
+                log.warning("db_persist_skill_failed", error=str(exc))
 
     def _find_relevant_skills(self, agent_type: str, event_type: str) -> List[Dict]:
         """Find skills relevant to an agent and event type."""
@@ -277,21 +395,44 @@ class MemoryStore:
     # ─── Policy Learning ───
 
     async def record_policy_violation(self, task_action: str, reason: str, agent_type: str):
-        """Record a policy violation for learning."""
-        self._policy_violations.append({
+        """Record a policy violation for learning — in-memory + DB."""
+        entry = {
             "action": task_action,
             "reason": reason,
             "agent": agent_type,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        self._policy_violations.append(entry)
+
+        if self._db_available:
+            try:
+                from db import repository
+                await repository.save_policy_event("violation", {
+                    "action": task_action,
+                    "reason": reason,
+                    "agent_type": agent_type,
+                })
+            except Exception:
+                pass
 
     async def record_policy_override(self, task_action: str, approved_by: str):
-        """Record when a human overrides a policy block."""
-        self._policy_overrides.append({
+        """Record when a human overrides a policy block — in-memory + DB."""
+        entry = {
             "action": task_action,
             "approved_by": approved_by,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        self._policy_overrides.append(entry)
+
+        if self._db_available:
+            try:
+                from db import repository
+                await repository.save_policy_event("override", {
+                    "action": task_action,
+                    "approved_by": approved_by,
+                })
+            except Exception:
+                pass
 
     def get_policy_learning_stats(self) -> Dict[str, Any]:
         """Get policy learning statistics."""

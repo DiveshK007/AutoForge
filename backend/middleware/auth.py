@@ -3,10 +3,11 @@ AutoForge Authentication & Authorization — Enterprise API security layer.
 
 Provides:
 - API key authentication for machine-to-machine calls
-- JWT bearer token auth for dashboard sessions
+- JWT bearer token auth for dashboard sessions (real JWT via python-jose)
 - Webhook signature verification
 - Role-based access control (RBAC)
 - Rate-aware request context with correlation IDs
+- Token issuance endpoint support
 """
 
 import hashlib
@@ -45,6 +46,52 @@ class AuthContext(BaseModel):
     def has_role(self, role: str) -> bool:
         """Check if the auth context has a specific role."""
         return role in self.roles
+
+
+class TokenRequest(BaseModel):
+    """Request body for token issuance."""
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    """JWT token response."""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds
+    roles: list[str] = []
+
+
+# ─── JWT Helpers ─────────────────────────────────────────────────
+
+def _create_jwt(subject: str, roles: list[str], expires_delta: Optional[timedelta] = None) -> str:
+    """Create a real JWT token using python-jose."""
+    from jose import jwt as jose_jwt
+
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.JWT_EXPIRE_MINUTES))
+    payload = {
+        "sub": subject,
+        "roles": roles,
+        "iat": datetime.now(timezone.utc),
+        "exp": expire,
+        "iss": "autoforge",
+    }
+    return jose_jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def _verify_jwt(token: str) -> Optional[dict]:
+    """Verify and decode a JWT token. Returns claims dict or None."""
+    try:
+        from jose import jwt as jose_jwt, JWTError, ExpiredSignatureError
+        claims = jose_jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_aud": False},
+        )
+        return claims
+    except Exception:
+        return None
 
 
 # ─── Helpers ─────────────────────────────────────────────────────
@@ -106,7 +153,7 @@ async def get_auth_context(
 
     Priority:
     1. API Key header (X-API-Key)
-    2. Bearer token
+    2. Bearer token (real JWT verification)
     3. Demo mode passthrough
     4. Reject
 
@@ -129,16 +176,22 @@ async def get_auth_context(
             return ctx
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # 2. Check Bearer token
+    # 2. Check Bearer token — real JWT verification
     if bearer:
-        # For enterprise: validate JWT here
-        # For now, accept any non-empty bearer as "dashboard session"
-        return AuthContext(
-            request_id=request_id,
-            authenticated=True,
-            auth_method="bearer",
-            principal="dashboard-session",
-            roles=["viewer"],
+        claims = _verify_jwt(bearer.credentials)
+        if claims:
+            return AuthContext(
+                request_id=request_id,
+                authenticated=True,
+                auth_method="bearer",
+                principal=claims.get("sub", "jwt-user"),
+                roles=claims.get("roles", ["viewer"]),
+            )
+        # Token invalid / expired
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # 3. Demo / development mode — allow unauthenticated read-only
