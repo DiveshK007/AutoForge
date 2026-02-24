@@ -1,5 +1,8 @@
 """
 AutoForge Telemetry API — Metrics and observability endpoints.
+
+Returns data in shapes the Next.js dashboard expects directly.
+Demo mode returns rich precomputed data for impressive first-load.
 """
 
 from fastapi import APIRouter, Request
@@ -42,11 +45,19 @@ async def get_system_metrics(request: Request):
 
 @router.get("/metrics/history")
 async def get_metrics_history(request: Request, hours: int = 24):
-    """Get historical metrics over time."""
-    telemetry = request.app.state.telemetry
-    history = await telemetry.get_metrics_history(hours=hours)
+    """Get historical metrics over time — returns array for frontend."""
+    from config import settings
+    from api.dashboard import _DEMO_METRICS_HISTORY
 
-    return {"history": history, "period_hours": hours}
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+
+    if use_demo:
+        return _DEMO_METRICS_HISTORY
+
+    history = await telemetry.get_metrics_history(hours=hours)
+    return history
 
 
 @router.get("/metrics/success-rate")
@@ -107,20 +118,41 @@ async def get_memory_reuse(request: Request):
 
 @router.get("/reasoning-trees")
 async def get_reasoning_trees(request: Request, limit: int = 10):
-    """Get recent reasoning trees from all agents."""
-    telemetry = request.app.state.telemetry
-    trees = await telemetry.get_recent_reasoning_trees(limit=limit)
+    """Get recent reasoning trees — returns dict keyed by scenario/workflow for frontend."""
+    from config import settings
+    from api.dashboard import _demo_reasoning_trees
 
-    return {"reasoning_trees": trees, "count": len(trees)}
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+
+    if use_demo:
+        return _demo_reasoning_trees()
+
+    trees = await telemetry.get_recent_reasoning_trees(limit=limit)
+    # Convert to dict keyed by workflow_id
+    result = {}
+    for tree in trees:
+        wf_id = tree.get("workflow_id", f"tree-{len(result)}")
+        result[wf_id] = {
+            "nodes": tree.get("nodes", []),
+            "edges": tree.get("edges", []),
+        }
+    return result
 
 
 @router.get("/learning-curve")
 async def get_learning_curve(request: Request):
-    """Get learning improvement data over time."""
-    telemetry = request.app.state.telemetry
-    curve = await telemetry.get_learning_curve()
+    """Get learning improvement data — returns array for frontend."""
+    from config import settings
+    from api.dashboard import _DEMO_LEARNING_CURVE
 
-    return {
-        "learning_curve": curve,
-        "meta_intelligence_score": await telemetry.calculate_meta_intelligence(),
-    }
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    use_demo = settings.DEMO_MODE and metrics.get("total_workflows", 0) == 0
+
+    if use_demo:
+        return _DEMO_LEARNING_CURVE
+
+    curve = await telemetry.get_learning_curve()
+    return curve

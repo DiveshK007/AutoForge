@@ -74,18 +74,36 @@ async def test_trigger(request: Request):
     """
     Manual test trigger for development.
     Accepts a simulated event payload for testing agent workflows.
+    Supports both {event_type: ...} and {scenario: ...} formats.
     """
     body = await request.json()
     brain: CommandBrain = request.app.state.brain
 
-    event_type = body.get("event_type", "pipeline_failure")
+    # Support both formats: {scenario: "pipeline_failure_missing_dep"} or {event_type: "pipeline_failure"}
+    scenario = body.get("scenario", "")
+    event_type = body.get("event_type", "")
+
+    # Map scenario names to event types
+    scenario_map = {
+        "pipeline_failure_missing_dep": "pipeline_failure",
+        "security_vulnerability": "security_alert",
+        "merge_request_opened": "merge_request_opened",
+        "inefficient_pipeline": "pipeline_success",
+    }
+
+    if scenario and not event_type:
+        event_type = scenario_map.get(scenario, "pipeline_failure")
+
+    if not event_type:
+        event_type = "pipeline_failure"
+
     normalized = NormalizedEvent(
         event_type=EventType(event_type),
         source="manual_test",
         project_id=body.get("project_id", "test-project"),
         project_name=body.get("project_name", "Test Project"),
         ref=body.get("ref", "main"),
-        payload=body.get("payload", {}),
+        payload=body.get("payload", {"scenario": scenario or event_type}),
         metadata=body.get("metadata", {}),
         timestamp=datetime.now(timezone.utc),
     )
@@ -96,4 +114,5 @@ async def test_trigger(request: Request):
         "status": "triggered",
         "workflow_id": workflow_id,
         "event_type": event_type,
+        "scenario": scenario or event_type,
     }

@@ -1,5 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+/* ─── Type Definitions ────────────────────────────────── */
+
 export interface DashboardOverview {
   system_status: string;
   total_workflows: number;
@@ -101,6 +103,38 @@ export interface LearningCurve {
   cumulative_success_rate: number;
 }
 
+export interface CarbonDashboard {
+  carbon_saved_grams: number;
+  energy_saved_kwh: number;
+  pipeline_efficiency: number;
+  optimization_count: number;
+  trees_equivalent?: number;
+  efficiency_score?: number;
+  optimizations?: CarbonOptimization[];
+  waste_sources?: WasteSource[];
+}
+
+export interface CarbonOptimization {
+  suggestion: string;
+  estimated_savings_percent: number;
+  priority: string;
+}
+
+export interface WasteSource {
+  source: string;
+  waste_percent: number;
+}
+
+export interface LearningDashboard {
+  learning_curve: LearningCurve[];
+  memory_utilization: number;
+  knowledge_reuse_count: number;
+  reasoning_depth_avg: number;
+  meta_intelligence_score: number;
+}
+
+/* ─── Fetch Helpers ───────────────────────────────────── */
+
 async function fetchAPI<T>(endpoint: string): Promise<T> {
   const res = await fetch(`${API_BASE}${endpoint}`, {
     cache: 'no-store',
@@ -111,26 +145,34 @@ async function fetchAPI<T>(endpoint: string): Promise<T> {
   return res.json();
 }
 
+/* ─── API Client ──────────────────────────────────────── */
+
 export const api = {
   // Dashboard
   getDashboard: () => fetchAPI<DashboardOverview>('/api/v1/dashboard/overview'),
   getActivityFeed: () => fetchAPI<ActivityEvent[]>('/api/v1/dashboard/activity'),
+  getLearningDashboard: () => fetchAPI<LearningDashboard>('/api/v1/dashboard/learning'),
+  getCarbonDashboard: () => fetchAPI<CarbonDashboard>('/api/v1/dashboard/carbon'),
 
   // Agents
   getAgents: () => fetchAPI<AgentSummary[]>('/api/v1/agents/'),
   getAgent: (type: string) => fetchAPI<AgentSummary>(`/api/v1/agents/${type}`),
-  getAgentReasoning: (type: string) => fetchAPI<ReasoningVisualization>(`/api/v1/agents/${type}/reasoning`),
+  getAgentReasoning: (type: string) =>
+    fetchAPI<ReasoningVisualization>(`/api/v1/agents/${type}/reasoning`),
 
   // Workflows
   getWorkflows: () => fetchAPI<Workflow[]>('/api/v1/workflows/'),
   getWorkflow: (id: string) => fetchAPI<Workflow>(`/api/v1/workflows/${id}`),
-  getWorkflowTimeline: (id: string) => fetchAPI<TimelineEntry[]>(`/api/v1/workflows/${id}/timeline`),
-  getWorkflowReasoning: (id: string) => fetchAPI<ReasoningVisualization>(`/api/v1/workflows/${id}/reasoning`),
+  getWorkflowTimeline: (id: string) =>
+    fetchAPI<TimelineEntry[]>(`/api/v1/workflows/${id}/timeline`),
+  getWorkflowReasoning: (id: string) =>
+    fetchAPI<ReasoningVisualization>(`/api/v1/workflows/${id}/reasoning`),
 
   // Telemetry
   getMetrics: () => fetchAPI<SystemMetrics>('/api/v1/telemetry/metrics'),
   getMetricsHistory: () => fetchAPI<MetricHistory[]>('/api/v1/telemetry/metrics/history'),
-  getReasoningTrees: () => fetchAPI<Record<string, ReasoningVisualization>>('/api/v1/telemetry/reasoning-trees'),
+  getReasoningTrees: () =>
+    fetchAPI<Record<string, ReasoningVisualization>>('/api/v1/telemetry/reasoning-trees'),
   getLearningCurve: () => fetchAPI<LearningCurve[]>('/api/v1/telemetry/learning-curve'),
 
   // Test trigger
