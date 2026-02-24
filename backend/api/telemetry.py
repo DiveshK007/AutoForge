@@ -49,6 +49,62 @@ async def get_metrics_history(request: Request, hours: int = 24):
     return {"history": history, "period_hours": hours}
 
 
+@router.get("/metrics/success-rate")
+async def get_success_rate(request: Request):
+    """Get current workflow success rate."""
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    return {
+        "success_rate": metrics.get("success_rate", 0.0),
+        "total_workflows": metrics.get("total_workflows", 0),
+        "total_fixes": metrics.get("total_fixes", 0),
+    }
+
+
+@router.get("/metrics/fix-time")
+async def get_fix_time(request: Request):
+    """Get average fix time metrics."""
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    return {
+        "avg_fix_time_seconds": metrics.get("avg_fix_time", 0.0),
+        "self_correction_rate": metrics.get("self_correction_rate", 0.0),
+    }
+
+
+@router.get("/metrics/collaboration")
+async def get_collaboration_metrics(request: Request):
+    """Get agent collaboration metrics."""
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    return {
+        "collaboration_index": metrics.get("collaboration_index", 0.0),
+        "agent_metrics": metrics.get("agent_metrics", {}),
+    }
+
+
+@router.get("/metrics/reasoning-depth")
+async def get_reasoning_depth(request: Request):
+    """Get average reasoning depth across agents."""
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    return {
+        "reasoning_depth_avg": metrics.get("reasoning_depth", 0.0),
+        "policy_confidence_trend": metrics.get("policy_trend", []),
+    }
+
+
+@router.get("/metrics/memory-reuse")
+async def get_memory_reuse(request: Request):
+    """Get memory utilisation and knowledge reuse stats."""
+    telemetry = request.app.state.telemetry
+    metrics = await telemetry.get_current_metrics()
+    return {
+        "memory_utilization": metrics.get("memory_utilization", 0.0),
+        "knowledge_reuse_count": metrics.get("knowledge_reuse", 0),
+    }
+
+
 @router.get("/reasoning-trees")
 async def get_reasoning_trees(request: Request, limit: int = 10):
     """Get recent reasoning trees from all agents."""
