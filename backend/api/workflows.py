@@ -10,8 +10,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 
 from models.events import EventType, NormalizedEvent
+from logging_config import get_logger
 
 router = APIRouter()
+log = get_logger("workflows")
 
 # ── Demo-scenario directory ──────────────────────────────────────
 _DEMO_DIR = Path(__file__).resolve().parents[2] / "demo_scenarios"
@@ -184,3 +186,51 @@ async def run_demo_scenario(scenario_id: str, request: Request):
         "workflow_id": workflow_id,
         "event_type": event.event_type.value,
     }
+
+
+# ─── Celery Result Tracking ─────────────────────────────────────
+
+@router.get("/celery-status/{celery_task_id}")
+async def celery_task_status(celery_task_id: str):
+    """
+    Query the status and result of a Celery-dispatched task.
+
+    Returns task state (PENDING, STARTED, SUCCESS, FAILURE, RETRY)
+    and the result payload when complete.
+    """
+    try:
+        from worker import celery_app
+        result = celery_app.AsyncResult(celery_task_id)
+
+        response = {
+            "celery_task_id": celery_task_id,
+            "state": result.state,
+            "ready": result.ready(),
+        }
+
+        if result.ready():
+            if result.successful():
+                response["result"] = result.result
+                response["status"] = "success"
+            else:
+                response["status"] = "failed"
+                response["error"] = str(result.result) if result.result else "Unknown error"
+        elif result.state == "STARTED":
+            response["status"] = "running"
+            response["info"] = result.info if isinstance(result.info, dict) else {}
+        elif result.state == "RETRY":
+            response["status"] = "retrying"
+            response["info"] = result.info if isinstance(result.info, dict) else {}
+        else:
+            response["status"] = "pending"
+
+        return response
+
+    except Exception as exc:
+        log.warning("celery_status_check_failed", task_id=celery_task_id, error=str(exc))
+        return {
+            "celery_task_id": celery_task_id,
+            "state": "UNKNOWN",
+            "status": "error",
+            "error": f"Cannot query Celery: {exc}",
+        }

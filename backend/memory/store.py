@@ -68,9 +68,10 @@ class MemoryStore:
         # Persistence flags
         self._db_available = False
         self._redis_available = False
+        self._vector_available = False
 
     async def initialize(self):
-        """Initialize memory stores — attempt DB & Redis, fall back to in-memory."""
+        """Initialize memory stores — attempt DB, Redis & ChromaDB, fall back to in-memory."""
         from config import settings
 
         # ─── PostgreSQL ───
@@ -94,11 +95,22 @@ class MemoryStore:
             except Exception as exc:
                 log.warning("memory_redis_unavailable", error=str(exc))
 
+        # ─── ChromaDB Vector Store ───
+        if not settings.DEMO_MODE:
+            try:
+                from db import vector_store
+                await vector_store.init_vector_store()
+                self._vector_available = vector_store.is_available()
+            except Exception as exc:
+                log.warning("memory_vector_unavailable", error=str(exc))
+
         mode_parts = ["in-memory"]
         if self._db_available:
             mode_parts.append("PostgreSQL")
         if self._redis_available:
             mode_parts.append("Redis")
+        if self._vector_available:
+            mode_parts.append("ChromaDB")
         mode_str = " + ".join(mode_parts)
         print(f"  🧠 Memory store initialized ({mode_str} with semantic + policy layers)")
 
@@ -177,6 +189,22 @@ class MemoryStore:
                 from db import redis_cache
                 await redis_cache.cache_delete(f"failures:{experience.failure_type}")
                 await redis_cache.cache_incr("stats:total_experiences")
+            except Exception:
+                pass
+
+        # ─── ChromaDB vector embedding ───
+        if self._vector_available:
+            try:
+                from db import vector_store
+                await vector_store.store_experience(experience.experience_id, {
+                    "agent_type": experience.agent_type,
+                    "failure_type": experience.failure_type,
+                    "context_summary": experience.context_summary,
+                    "action_taken": experience.action_taken,
+                    "success": experience.success,
+                    "confidence": experience.confidence,
+                    "reusable_skill": experience.reusable_skill,
+                })
             except Exception:
                 pass
 
@@ -271,6 +299,23 @@ class MemoryStore:
         if shared:
             result["cross_agent_knowledge"] = shared[-5:]
 
+        # ─── 6. ChromaDB vector similarity search ───
+        if self._vector_available:
+            try:
+                from db import vector_store
+                query_text = f"{event_type} {error_logs[:500]}" if error_logs else event_type
+                if query_text:
+                    vector_hits = await vector_store.search_similar(
+                        query=query_text,
+                        agent_type=agent_type,
+                        n_results=5,
+                    )
+                    if vector_hits:
+                        result["vector_matches"] = vector_hits
+                        self._knowledge_reuse_count += 1
+            except Exception:
+                pass
+
         return result
 
     # ─── Skill Management ───
@@ -323,6 +368,14 @@ class MemoryStore:
                 })
             except Exception as exc:
                 log.warning("db_persist_skill_failed", error=str(exc))
+
+        # ─── Persist skill to ChromaDB ───
+        if self._vector_available:
+            try:
+                from db import vector_store
+                await vector_store.store_skill(skill_key, skill)
+            except Exception:
+                pass
 
     def _find_relevant_skills(self, agent_type: str, event_type: str) -> List[Dict]:
         """Find skills relevant to an agent and event type."""
@@ -454,7 +507,7 @@ class MemoryStore:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get memory system statistics."""
-        return {
+        stats = {
             "total_experiences": len(self._experiences),
             "failure_pattern_types": len(self._failure_patterns),
             "total_skills": len(self._skills),
@@ -466,7 +519,9 @@ class MemoryStore:
                 self._knowledge_reuse_count / max(self._recall_count, 1)
             ),
             "policy_violations": len(self._policy_violations),
+            "vector_store_available": self._vector_available,
         }
+        return stats
 
     def get_skills(self) -> List[Dict[str, Any]]:
         """Get all learned skills."""

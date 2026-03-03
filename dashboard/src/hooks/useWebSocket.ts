@@ -67,10 +67,20 @@ export function useAutoForgeWebSocket(options: UseWebSocketOptions = {}) {
 
       ws.onmessage = (event) => {
         try {
-          const msg: WSMessage = JSON.parse(event.data);
+          const raw = JSON.parse(event.data);
+
+          // Backend sends "type" field, normalise to "event" for the hook interface
+          const msg: WSMessage = {
+            event: raw.event || raw.type,
+            data: raw,
+            timestamp: raw.timestamp,
+          };
 
           // Filter by event type if specified
           if (events && !events.includes(msg.event)) return;
+
+          // Skip heartbeat / pong noise from triggering re-renders
+          if (msg.event === 'pong' || (raw.type === 'heartbeat')) return;
 
           setLastMessage(msg);
           onMessage?.(msg);

@@ -32,17 +32,39 @@ import { SharedContextView } from '@/components/workflows/SharedContextView';
 import { RetryTimeline, RetryBadge } from '@/components/workflows/RetryTimeline';
 import { MISBreakdown } from '@/components/metrics/MISBreakdown';
 import { useAutoForgeWebSocket } from '@/hooks/useWebSocket';
+import { AuthProvider, useAuth } from '@/components/auth/AuthProvider';
+import { LoginScreen } from '@/components/auth/LoginScreen';
 
 type Tab = 'overview' | 'agents' | 'reasoning' | 'learning' | 'sustainability' | 'workflows';
 
 export default function DashboardPage() {
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <DashboardContent />
-      </ErrorBoundary>
+      <AuthProvider>
+        <ErrorBoundary>
+          <AuthGate />
+        </ErrorBoundary>
+      </AuthProvider>
     </ThemeProvider>
   );
+}
+
+function AuthGate() {
+  const { authenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-950">
+        <div className="animate-pulse text-surface-200/50 text-lg">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <LoginScreen />;
+  }
+
+  return <DashboardContent />;
 }
 
 function DashboardContent() {
@@ -65,9 +87,102 @@ function DashboardContent() {
   // WebSocket for real-time updates
   const { connected: wsConnected, lastMessage } = useAutoForgeWebSocket({
     onMessage: (msg) => {
-      // Trigger a faster refresh on important events
-      if (msg.event === 'workflow_update' || msg.event === 'agent_action') {
-        fetchAll();
+      const d = msg.data as Record<string, unknown>;
+
+      switch (msg.event) {
+        case 'workflow_update': {
+          // Optimistically update dashboard workflow counts
+          setDashboard((prev) => {
+            if (!prev) return prev;
+            const status = d.status as string | undefined;
+            if (status === 'created') {
+              return {
+                ...prev,
+                total_workflows: prev.total_workflows + 1,
+                active_workflows: prev.active_workflows + 1,
+              };
+            }
+            if (status === 'completed' || status === 'failed') {
+              return {
+                ...prev,
+                active_workflows: Math.max(0, prev.active_workflows - 1),
+              };
+            }
+            return prev;
+          });
+          // Prepend to activity feed
+          setActivity((prev) => [
+            {
+              timestamp: msg.timestamp || new Date().toISOString(),
+              type: 'workflow',
+              description: `Workflow ${(d.workflow_id as string)?.slice(0, 8)} — ${d.status}`,
+              status: d.status as string || 'info',
+              workflow_id: d.workflow_id as string,
+            },
+            ...prev.slice(0, 49),
+          ]);
+          break;
+        }
+        case 'agent_action': {
+          // Optimistically update the matching agent's stats
+          setDashboard((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              agents: prev.agents.map((a) =>
+                a.type === d.agent_type
+                  ? {
+                      ...a,
+                      tasks_completed: a.tasks_completed + 1,
+                      status: 'active',
+                    }
+                  : a,
+              ),
+            };
+          });
+          // Prepend to activity feed
+          setActivity((prev) => [
+            {
+              timestamp: msg.timestamp || new Date().toISOString(),
+              type: 'agent_action',
+              agent: d.agent_type as string,
+              description: d.detail as string || `${d.agent_type} — ${d.action}`,
+              status: (d.success as boolean) ? 'completed' : 'failed',
+              workflow_id: d.workflow_id as string,
+            },
+            ...prev.slice(0, 49),
+          ]);
+          break;
+        }
+        case 'activity': {
+          setActivity((prev) => [
+            {
+              timestamp: msg.timestamp || new Date().toISOString(),
+              type: d.event as string || 'system',
+              agent: d.agent as string,
+              description: d.description as string,
+              status: d.status as string || 'info',
+            },
+            ...prev.slice(0, 49),
+          ]);
+          break;
+        }
+        case 'metrics_snapshot': {
+          // Merge metrics snapshot into dashboard
+          const m = d.metrics as Record<string, number> | undefined;
+          if (m) {
+            setDashboard((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                metrics: { ...prev.metrics, ...m },
+              };
+            });
+          }
+          break;
+        }
+        default:
+          break;
       }
     },
   });
@@ -119,9 +234,11 @@ function DashboardContent() {
 
   useEffect(() => {
     fetchAll();
-    const interval = setInterval(fetchAll, 4000);
+    // When WebSocket is connected, slow down polling to a background sync;
+    // otherwise fall back to aggressive polling.
+    const interval = setInterval(fetchAll, wsConnected ? 30000 : 4000);
     return () => clearInterval(interval);
-  }, [fetchAll]);
+  }, [fetchAll, wsConnected]);
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: 'overview', label: 'Overview', icon: '📊' },

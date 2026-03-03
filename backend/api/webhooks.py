@@ -40,6 +40,7 @@ async def receive_gitlab_webhook(
     request: Request,
     x_gitlab_token: str | None = Header(None, alias="X-Gitlab-Token"),
     x_gitlab_event: str | None = Header(None, alias="X-Gitlab-Event"),
+    x_gitlab_signature: str | None = Header(None, alias="X-Gitlab-Signature"),
 ):
     """
     Receive and process GitLab webhook events.
@@ -50,13 +51,35 @@ async def receive_gitlab_webhook(
     - Push Hook (code changes)
     - Note Hook (comments)
     """
-    body = await request.json()
+    # Read raw body once for both HMAC verification and JSON parsing
+    raw_body = await request.body()
     brain: CommandBrain = request.app.state.brain
 
-    # ─── Verify webhook token ───
+    # ─── Verify webhook authenticity ───
     from config import settings
-    if settings.GITLAB_WEBHOOK_SECRET and x_gitlab_token != settings.GITLAB_WEBHOOK_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid webhook token")
+    secret = settings.GITLAB_WEBHOOK_SECRET
+    if secret:
+        # Method 1: HMAC-SHA256 signature (preferred — GitLab sends X-Gitlab-Signature)
+        if x_gitlab_signature:
+            expected = hmac.new(
+                secret.encode("utf-8"),
+                raw_body,
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(expected, x_gitlab_signature):
+                log.warning("webhook_signature_mismatch", header="X-Gitlab-Signature")
+                raise HTTPException(status_code=401, detail="Invalid HMAC signature")
+        # Method 2: Simple secret token (fallback — older GitLab versions)
+        elif x_gitlab_token:
+            if x_gitlab_token != secret:
+                log.warning("webhook_token_mismatch")
+                raise HTTPException(status_code=401, detail="Invalid webhook token")
+        else:
+            # Secret configured but no authentication header provided
+            log.warning("webhook_no_auth_header")
+            raise HTTPException(status_code=401, detail="Missing authentication header")
+
+    body = __import__("json").loads(raw_body)
 
     # ─── Parse raw event ───
     raw_event = GitLabEvent(
@@ -70,6 +93,9 @@ async def receive_gitlab_webhook(
 
     if normalized is None:
         return {"status": "ignored", "reason": "Event type not actionable"}
+
+    # ─── Enrich MR events with diff (best-effort) ───
+    normalized = await normalizer.enrich_with_diff(normalized)
 
     # ─── Route: Celery (production) vs in-process (demo) ───
     if not settings.DEMO_MODE and _celery_available():

@@ -127,3 +127,49 @@ def execute_agent_task(self, agent_type: str, task_data: dict):
     except Exception as exc:
         log.error("celery_execute_agent_failed", agent=agent_type, error=str(exc))
         raise self.retry(exc=exc, countdown=10 * (self.request.retries + 1))
+
+
+# ─── Result Callbacks — Feed Celery outcomes back to the system ───
+
+@celery_app.task(name="autoforge.on_task_success")
+def on_task_success_callback(result, task_id: str, workflow_id: str = ""):
+    """
+    Callback invoked after a Celery task completes successfully.
+    Broadcasts the result via WebSocket so the dashboard gets real-time updates.
+    """
+    try:
+        import asyncio
+        from api.websocket import broadcast_workflow_update
+
+        loop = _get_or_create_event_loop()
+        wf_id = workflow_id or (result.get("workflow_id", "") if isinstance(result, dict) else "")
+        if wf_id:
+            loop.run_until_complete(broadcast_workflow_update(
+                wf_id,
+                status="completed",
+                event_type="celery_result",
+                detail=f"Celery task {task_id} completed",
+            ))
+        log.info("celery_result_callback", task_id=task_id, workflow_id=wf_id)
+    except Exception as exc:
+        log.warning("celery_result_callback_failed", error=str(exc))
+
+
+# ─── Signal handlers for automatic result tracking ───
+
+from celery.signals import task_success, task_failure
+
+
+@task_success.connect
+def handle_task_success(sender=None, result=None, **kwargs):
+    """Signal handler: log Celery task success and broadcast."""
+    task_id = sender.request.id if sender else "unknown"
+    wf_id = result.get("workflow_id", "") if isinstance(result, dict) else ""
+    log.info("celery_task_success_signal", task_id=task_id, workflow_id=wf_id)
+
+
+@task_failure.connect
+def handle_task_failure(sender=None, exception=None, **kwargs):
+    """Signal handler: log Celery task failure."""
+    task_id = sender.request.id if sender else "unknown"
+    log.warning("celery_task_failure_signal", task_id=task_id, error=str(exception))

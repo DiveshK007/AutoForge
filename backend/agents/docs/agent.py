@@ -42,7 +42,7 @@ class DocsAgent(BaseAgent):
         self.reasoning_engine = ReasoningEngine()
 
     async def perceive(self, task: AgentTask, workflow: Workflow) -> Dict[str, Any]:
-        return {
+        context = {
             "action": task.action,
             "project_id": task.input_data.get("project_id"),
             "commit_message": task.input_data.get("commit_message", ""),
@@ -51,6 +51,26 @@ class DocsAgent(BaseAgent):
             "ref": task.input_data.get("ref", "main"),
             "error_logs": task.input_data.get("error_logs", ""),
         }
+
+        # Consume upstream shared context for richer documentation
+        shared = task.input_data.get("_shared_context", {})
+        if shared:
+            context["upstream_analysis"] = shared
+            sre_ctx = shared.get("sre", {})
+            if sre_ctx:
+                context["sre_root_cause"] = sre_ctx.get("result", {}).get("summary", "") if isinstance(sre_ctx.get("result"), dict) else ""
+                context["sre_fix_branch"] = sre_ctx.get("result", {}).get("output", {}).get("branch_name", "") if isinstance(sre_ctx.get("result"), dict) else ""
+            security_ctx = shared.get("security", {})
+            if security_ctx:
+                context["security_summary"] = security_ctx.get("summary", "")
+            qa_ctx = shared.get("qa", {})
+            if qa_ctx:
+                context["qa_summary"] = qa_ctx.get("summary", "")
+            review_ctx = shared.get("review", {})
+            if review_ctx:
+                context["review_summary"] = review_ctx.get("summary", "")
+
+        return context
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
         if settings.DEMO_MODE:

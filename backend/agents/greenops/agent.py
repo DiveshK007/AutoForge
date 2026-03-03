@@ -67,6 +67,18 @@ class GreenOpsAgent(BaseAgent):
             "memory_gb": payload.get("memory_gb", 4),
         }
 
+        # Consume upstream shared context for richer analysis
+        shared = payload.get("_shared_context", {})
+        if shared:
+            context["upstream_analysis"] = shared
+            sre_ctx = shared.get("sre", {})
+            if sre_ctx:
+                context["sre_fix_summary"] = sre_ctx.get("summary", "")
+                context["sre_self_corrected"] = sre_ctx.get("self_corrected", False)
+            qa_ctx = shared.get("qa", {})
+            if qa_ctx:
+                context["qa_test_count"] = qa_ctx.get("result", {}).get("output", {}).get("test_count", 0) if isinstance(qa_ctx.get("result"), dict) else 0
+
         return context
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:

@@ -46,7 +46,7 @@ class ReviewAgent(BaseAgent):
 
     async def perceive(self, task: AgentTask, workflow: Workflow) -> Dict[str, Any]:
         """Parse review context."""
-        return {
+        context = {
             "action": task.action,
             "mr_id": task.input_data.get("mr_id"),
             "mr_title": task.input_data.get("mr_title", ""),
@@ -54,6 +54,23 @@ class ReviewAgent(BaseAgent):
             "changed_files": task.input_data.get("changed_files", []),
             "project_id": task.input_data.get("project_id"),
         }
+
+        # Consume upstream shared context
+        shared = task.input_data.get("_shared_context", {})
+        if shared:
+            context["upstream_analysis"] = shared
+            security_ctx = shared.get("security", {})
+            if security_ctx:
+                context["security_scan_result"] = security_ctx.get("result", security_ctx.get("summary", ""))
+                context["security_confidence"] = security_ctx.get("confidence", 0)
+            sre_ctx = shared.get("sre", {})
+            if sre_ctx:
+                context["sre_summary"] = sre_ctx.get("summary", "")
+            qa_ctx = shared.get("qa", {})
+            if qa_ctx:
+                context["qa_test_count"] = qa_ctx.get("result", {}).get("output", {}).get("test_count", 0) if isinstance(qa_ctx.get("result"), dict) else 0
+
+        return context
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze code for quality issues."""

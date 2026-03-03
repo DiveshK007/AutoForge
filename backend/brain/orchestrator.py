@@ -115,6 +115,9 @@ class CommandBrain:
         # Store workflow
         self.state_manager.register_workflow(workflow)
 
+        # Persist workflow to DB
+        await self._persist_workflow_created(workflow)
+
         # Log telemetry
         if self.telemetry:
             await self.telemetry.log_event("workflow_created", {
@@ -159,16 +162,49 @@ class CommandBrain:
                 detail=f"Task DAG: {dep_info}",
             )
 
-            # ─── Phase 2: Policy Check ───
+            # ─── Phase 2: Policy Check (with approval gate) ───
             for task in tasks:
                 allowed, reason = self.policy_engine.check_policy(task, workflow)
                 if not allowed:
-                    task.status = TaskStatus.SKIPPED
-                    workflow.add_timeline_entry(
-                        "task_skipped",
-                        agent=task.agent_type,
-                        detail=f"Policy blocked: {reason}",
-                    )
+                    # Check if the task needs human approval vs hard block
+                    approval_reqs = self.policy_engine.get_approval_requirements(task)
+                    if approval_reqs.get("requires_approval"):
+                        # Submit to approval queue instead of skipping
+                        try:
+                            from api.approvals import ApprovalRequest, approval_queue
+                            req = ApprovalRequest(
+                                task_id=task.task_id,
+                                workflow_id=workflow.workflow_id,
+                                agent_type=task.agent_type,
+                                action=task.action,
+                                reason=reason,
+                                risk_score=task.risk_score,
+                                context={
+                                    "input_summary": str(task.input_data)[:500],
+                                    "approval_type": approval_reqs.get("approval_type", "human"),
+                                },
+                            )
+                            approval_queue.submit(req)
+                            task.status = TaskStatus.PENDING_APPROVAL
+                            workflow.add_timeline_entry(
+                                "task_pending_approval",
+                                agent=task.agent_type,
+                                detail=f"Awaiting human approval: {reason}",
+                            )
+                        except Exception:
+                            task.status = TaskStatus.SKIPPED
+                            workflow.add_timeline_entry(
+                                "task_skipped",
+                                agent=task.agent_type,
+                                detail=f"Policy blocked: {reason}",
+                            )
+                    else:
+                        task.status = TaskStatus.SKIPPED
+                        workflow.add_timeline_entry(
+                            "task_skipped",
+                            agent=task.agent_type,
+                            detail=f"Policy blocked: {reason}",
+                        )
 
             # ─── Phase 3: Conflict Resolution ───
             tasks = self.conflict_resolver.resolve(tasks)
@@ -322,6 +358,9 @@ class CommandBrain:
             # ─── Phase 9: Telemetry ───
             if self.telemetry:
                 await self.telemetry.log_workflow_completed(workflow)
+
+            # ─── Phase 10: Persist final state to DB ───
+            await self._persist_workflow_completed(workflow)
 
         except Exception as e:
             workflow.status = WorkflowStatus.FAILED
@@ -534,3 +573,62 @@ class CommandBrain:
             "links": links,
             "context": context,
         }
+
+    # ─── DB Persistence Helpers ───
+
+    async def _persist_workflow_created(self, workflow: Workflow):
+        """Persist a newly created workflow to the database."""
+        try:
+            from db import repository
+            if not repository.is_db_available():
+                return
+            await repository.save_workflow({
+                "workflow_id": workflow.workflow_id,
+                "event_type": workflow.event_type,
+                "project_id": workflow.project_id,
+                "project_name": workflow.project_name,
+                "ref": workflow.ref,
+                "status": workflow.status.value,
+                "agents_involved": workflow.agents_involved,
+                "trigger_payload": workflow.trigger_payload,
+                "timeline": [e.__dict__ if hasattr(e, '__dict__') else e for e in workflow.timeline],
+            })
+        except Exception as exc:
+            log.warning("persist_workflow_created_failed", error=str(exc))
+
+    async def _persist_workflow_completed(self, workflow: Workflow):
+        """Update the workflow record in the database with final state."""
+        try:
+            from db import repository
+            if not repository.is_db_available():
+                return
+            await repository.update_workflow(workflow.workflow_id, {
+                "status": workflow.status.value,
+                "agents_involved": workflow.agents_involved,
+                "reasoning_chain": workflow.reasoning_chain,
+                "timeline": [e.__dict__ if hasattr(e, '__dict__') else e for e in workflow.timeline],
+                "shared_context": {k: str(v)[:2000] for k, v in workflow.shared_context.items()},
+                "retry_history": getattr(workflow, '_retry_history', []),
+                "completed_at": workflow.completed_at,
+            })
+
+            # Also persist individual tasks
+            for task in workflow.tasks:
+                await repository.save_workflow_task(workflow.workflow_id, {
+                    "task_id": task.task_id,
+                    "workflow_id": workflow.workflow_id,
+                    "agent_type": task.agent_type,
+                    "action": task.action,
+                    "priority": task.priority.value if hasattr(task.priority, 'value') else str(task.priority),
+                    "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+                    "dependencies": task.dependencies,
+                    "input_data": {k: str(v)[:500] for k, v in task.input_data.items()} if task.input_data else {},
+                    "output_data": {k: str(v)[:500] for k, v in task.output_data.items()} if task.output_data else {},
+                    "reasoning": task.reasoning if isinstance(task.reasoning, dict) else {},
+                    "confidence": task.confidence,
+                    "risk_score": task.risk_score,
+                    "error": task.error,
+                    "completed_at": task.completed_at,
+                })
+        except Exception as exc:
+            log.warning("persist_workflow_completed_failed", error=str(exc))

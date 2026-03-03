@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from models.events import GitLabEvent, NormalizedEvent, EventType
+from config import settings
 
 
 class EventNormalizer:
@@ -118,13 +119,16 @@ class EventNormalizer:
                 "target_branch": attrs.get("target_branch"),
                 "state": attrs.get("state"),
                 "action": action,
-                "diff": "",  # Would be fetched via API
-                "changed_files": [],
+                "diff": "",  # Populated below via API
+                "changed_files": [],  # Populated below via API
             },
             metadata={
                 "author": attrs.get("author_id"),
                 "assignee": attrs.get("assignee_id"),
                 "labels": payload.get("labels", []),
+                "_needs_diff_fetch": True,
+                "_project_id": str(project.get("id", "")),
+                "_mr_iid": attrs.get("iid"),
             },
         )
 
@@ -161,3 +165,39 @@ class EventNormalizer:
                 "user": payload.get("user_username"),
             },
         )
+
+    async def enrich_with_diff(self, event: NormalizedEvent) -> NormalizedEvent:
+        """
+        Fetch MR diff from GitLab API and attach to the event payload.
+
+        Called by the webhook handler after normalization when the event
+        has _needs_diff_fetch metadata.
+        """
+        needs_fetch = event.metadata.get("_needs_diff_fetch", False)
+        if not needs_fetch:
+            return event
+
+        project_id = event.metadata.get("_project_id", event.project_id)
+        mr_iid = event.metadata.get("_mr_iid")
+        if not project_id or not mr_iid:
+            return event
+
+        try:
+            from integrations.gitlab import MergeRequestService
+            mrs = MergeRequestService()
+            mr_info = await mrs.get_changes(project_id, mr_iid)
+
+            # Extract diff text and changed file paths
+            diff_parts = []
+            changed_files = []
+            for change in mr_info.changes:
+                changed_files.append(change.new_path)
+                if change.diff:
+                    diff_parts.append(f"--- {change.old_path}\n+++ {change.new_path}\n{change.diff}")
+
+            event.payload["diff"] = "\n".join(diff_parts)[:10000]  # Cap at 10k chars
+            event.payload["changed_files"] = changed_files
+        except Exception:
+            pass  # Diff fetch is best-effort; agents work without it
+
+        return event

@@ -67,6 +67,17 @@ class SREAgent(BaseAgent):
             "retry_context": input_data.get("retry_context"),
         }
 
+        # ─── LIVE MODE: fetch real job logs if we have none ───
+        if not settings.DEMO_MODE and not context["error_logs"] and context["pipeline_id"] and context["project_id"]:
+            context["error_logs"] = await self._fetch_pipeline_logs(
+                context["project_id"], context["pipeline_id"],
+            )
+            workflow.add_timeline_entry(
+                "logs_fetched",
+                agent="sre",
+                detail=f"Fetched {len(context['error_logs'])} chars of job logs from GitLab",
+            )
+
         # Classify failure type from logs
         context["failure_signals"] = self._extract_failure_signals(
             context.get("error_logs", "")
@@ -84,6 +95,20 @@ class SREAgent(BaseAgent):
         )
 
         return context
+
+    async def _fetch_pipeline_logs(self, project_id: str, pipeline_id: int) -> str:
+        """Fetch real job logs from GitLab for failed jobs."""
+        try:
+            from tools.gitlab_tools import GitLabTools
+            tools = GitLabTools()
+            result = await tools.get_pipeline_logs(project_id, pipeline_id)
+            data = result if isinstance(result, dict) else {}
+            if data.get("success"):
+                logs = data.get("data", {}).get("logs", {})
+                return "\n---\n".join(f"[{name}]\n{text}" for name, text in logs.items())
+        except Exception:
+            pass
+        return ""
 
     async def reason(self, context: Dict[str, Any], prior_knowledge: Dict[str, Any]) -> Dict[str, Any]:
         """Generate and evaluate failure hypotheses with multi-depth reasoning tree."""

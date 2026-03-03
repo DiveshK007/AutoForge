@@ -179,10 +179,25 @@ export interface AuthInfo {
 
 /* ─── Fetch Helpers ───────────────────────────────────── */
 
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem('autoforge_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function fetchAPI<T>(endpoint: string): Promise<T> {
   const res = await fetch(`${API_BASE}${endpoint}`, {
     cache: 'no-store',
+    headers: { ...getAuthHeaders() },
   });
+  if (res.status === 401) {
+    // Token expired or invalid — clear and signal
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('autoforge_token');
+      window.dispatchEvent(new Event('autoforge:logout'));
+    }
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`);
   }
@@ -223,7 +238,7 @@ export const api = {
   triggerTest: (scenarioName: string) =>
     fetch(`${API_BASE}/api/v1/webhooks/test-trigger`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ scenario: scenarioName }),
     }).then((r) => r.json()),
 

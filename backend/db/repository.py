@@ -221,3 +221,60 @@ async def save_policy_event(event_kind: str, data: dict):
             await session.commit()
     except Exception as exc:
         log.warning("save_policy_event_failed", error=str(exc))
+
+
+# ─── Workflow Task CRUD ─────────────────────────────────────────
+
+async def save_workflow_task(workflow_id: str, data: dict) -> Optional[str]:
+    """Persist or update a workflow task row."""
+    if not _db_available:
+        return None
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            existing = await session.get(WorkflowTaskRow, data.get("task_id"))
+            if existing:
+                for k, v in data.items():
+                    if hasattr(existing, k):
+                        setattr(existing, k, v)
+            else:
+                row = WorkflowTaskRow(**data)
+                session.add(row)
+            await session.commit()
+            return data.get("task_id")
+    except Exception as exc:
+        log.warning("save_workflow_task_failed", error=str(exc))
+        return None
+
+
+async def load_workflows(limit: int = 50, status: Optional[str] = None) -> List[dict]:
+    """Load workflow history from the database."""
+    if not _db_available:
+        return []
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            stmt = select(WorkflowRow).order_by(desc(WorkflowRow.created_at)).limit(limit)
+            if status:
+                stmt = stmt.where(WorkflowRow.status == status)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            return [
+                {
+                    "workflow_id": r.workflow_id,
+                    "event_type": r.event_type,
+                    "project_id": r.project_id,
+                    "project_name": r.project_name,
+                    "status": r.status,
+                    "agents_involved": r.agents_involved or [],
+                    "reasoning_chain": r.reasoning_chain or [],
+                    "timeline": r.timeline or [],
+                    "retry_history": r.retry_history or [],
+                    "created_at": r.created_at.isoformat() if r.created_at else "",
+                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                }
+                for r in rows
+            ]
+    except Exception as exc:
+        log.warning("load_workflows_failed", error=str(exc))
+        return []

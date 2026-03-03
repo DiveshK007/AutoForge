@@ -31,6 +31,7 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+    PENDING_APPROVAL = "pending_approval"
 
 
 class TaskPriority(str, Enum):
