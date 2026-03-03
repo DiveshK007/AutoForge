@@ -10,6 +10,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - PYTHONPATH=/app/backend
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
       - GITLAB_TOKEN=${GITLAB_TOKEN}
@@ -20,6 +21,7 @@ services:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8100
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DEMO_MODE=${DEMO_MODE:-true}
       - CORS_ORIGINS=http://localhost:3000,http://dashboard:3000
     depends_on:
       redis:
@@ -41,8 +43,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: autoforge-worker
-    command: celery -A backend.worker worker --loglevel=info --concurrency=4
+    command: celery -A worker worker --loglevel=info --concurrency=4
     environment:
+      - PYTHONPATH=/app/backend
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
       - GITLAB_TOKEN=${GITLAB_TOKEN}
@@ -51,6 +54,7 @@ services:
       - DATABASE_URL=postgresql://autoforge:autoforge@postgres:5432/autoforge
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8100
+      - DEMO_MODE=${DEMO_MODE:-true}
     depends_on:
       redis:
         condition: service_healthy

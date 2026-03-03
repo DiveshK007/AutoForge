@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir -r requirements-full.txt
 COPY backend/ ./backend/
 COPY demo_scenarios/ ./demo_scenarios/
 
+# Backend modules use bare imports (from config import settings)
+ENV PYTHONPATH=/app/backend
+
 # Expose port
 EXPOSE 8000
 

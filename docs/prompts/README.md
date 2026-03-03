@@ -1,31 +1,83 @@
-# AutoForge — Agent Prompt Library
+# AutoForge — Prompt Engineering
 
-This directory contains the system prompts and reasoning templates used by each agent.
+## Overview
 
-## Prompt Design Principles
+AutoForge externalises all LLM prompts into YAML templates (`prompts/agents.yaml`) rather than embedding them in Python source code. This separation enables:
 
-1. **Role clarity** — Each prompt starts with a clear agent identity
-2. **Structured output** — JSON schemas enforce consistent LLM responses
-3. **Safety rails** — Prompts include explicit constraints (no destructive actions)
-4. **Evidence-based** — Prompts require evidence and confidence scores
-5. **Reflective** — All prompts include self-critique steps
+- **Rapid iteration** — edit prompts without touching agent logic
+- **Version control** — prompt diffs are clean and reviewable
+- **A/B testing** — swap prompt files at runtime
+- **Transparency** — judges/reviewers can audit prompts in one file
 
-## Agent Prompts
+## Architecture
 
-| Agent | Prompt File | Description |
-|-------|-------------|-------------|
-| SRE | `backend/agents/sre/prompts.py` | Pipeline diagnosis, fix generation |
-| Security | Inline in `agent.py` | CVE analysis, patch strategy |
-| QA | Inline in `agent.py` | Test generation, coverage analysis |
-| Review | Inline in `agent.py` | Code quality, architecture review |
-| Docs | Inline in `agent.py` | Changelog, README updates |
-| GreenOps | Inline in `agent.py` | Energy estimation, carbon optimization |
+```
+prompts/
+├── agents.yaml    # All agent prompts (192 lines, 6 agents × 3 phases)
+└── loader.py      # YAML → rendered string with variable substitution
+```
 
-## Reasoning Frameworks
+### Loader API
 
-The Reasoning Engine supports 4 frameworks:
+```python
+from prompts.loader import load_prompt
 
-1. **Chain-of-Thought** — Linear step-by-step analysis
-2. **Tree-of-Thought** — Multi-path hypothesis exploration
-3. **ReAct** — Reason + Act iterative loops
-4. **Reflection** — Self-critique and refinement
+# Load a specific prompt, rendering template variables
+prompt = load_prompt("sre", "diagnosis", {
+    "error_logs": log_text,
+    "failure_signals": signals,
+    "commit_message": commit,
+    "prior_fixes": memory_recall,
+})
+```
+
+The loader:
+1. Reads `agents.yaml` (cached after first load)
+2. Looks up `agent_name → phase_name`
+3. Renders `{variable}` placeholders with the provided context dict
+4. Falls back to inline Python constants if YAML or PyYAML is unavailable
+
+## Prompt Structure Per Agent
+
+Each agent has up to 3 prompt phases:
+
+| Phase | Purpose | Used When |
+|-------|---------|-----------|
+| `system` | Sets the agent's identity, role, and behavioural constraints | Every LLM call (system message) |
+| `diagnosis` / `analysis` | Structured analysis of the incoming event | Perception + Reasoning phases |
+| `fix_generation` / `action` | Generates the concrete remediation plan | Planning + Execution phases |
+
+## Agents Covered
+
+| Agent | Prompts | Key Focus |
+|-------|---------|-----------|
+| **SRE** | `system`, `diagnosis`, `fix_generation` | Pipeline failure root-cause analysis, minimal safe fixes |
+| **Security** | `system`, `analysis` | CVE detection, CVSS scoring, patch generation |
+| **QA** | `system`, `analysis` | Test generation, regression detection, coverage gaps |
+| **Review** | `system`, `analysis` | Architecture violations, performance anti-patterns |
+| **Docs** | `system`, `analysis` | Changelog generation, API doc updates |
+| **GreenOps** | `system`, `analysis` | Carbon scoring, pipeline waste identification |
+
+## Design Principles
+
+1. **Structured output** — Every prompt asks for numbered steps, confidence scores, and evidence
+2. **Safety-first** — Prompts emphasise minimal changes, risk assessment, and human escalation
+3. **Memory-aware** — Prompts include `{prior_fixes}` slots for injecting recall from MemoryStore
+4. **Honest confidence** — Agents are explicitly told to "score your confidence honestly"
+5. **Multi-hypothesis** — Prompts require considering alternative causes before deciding
+
+## Runtime Flow
+
+```
+Event arrives
+  → Agent.perceive() extracts context
+  → memory.recall() fetches prior knowledge
+  → load_prompt(agent, "diagnosis", context) → rendered prompt
+  → Claude Sonnet 4 API call (or DEMO_MODE precomputed response)
+  → Agent.reason() parses structured output
+  → Agent.plan() selects best hypothesis
+  → Agent.act() executes tools
+  → Agent.reflect() generates learning summary
+```
+
+In `DEMO_MODE=true`, the prompt loading still occurs but the LLM call is short-circuited with precomputed reasoning trees from `backend/demo/engine.py`.
