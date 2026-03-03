@@ -7,9 +7,10 @@ Provides a human-friendly explanation of:
 - Memory / prior knowledge that influenced a decision
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from logging_config import get_logger
+from middleware.auth import AuthContext, get_auth_context
 
 log = get_logger("explain")
 
@@ -105,7 +106,7 @@ def _format_scenario_explanation(scenario_key: str, tree_data: dict) -> str:
 
 
 @router.get("/workflow/{workflow_id}")
-async def explain_workflow(workflow_id: str, request: Request):
+async def explain_workflow(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """
     Get a natural-language explanation of why AutoForge did what it did.
 
@@ -160,7 +161,7 @@ async def explain_workflow(workflow_id: str, request: Request):
 
 
 @router.get("/agent/{agent_type}")
-async def explain_agent(agent_type: str, request: Request):
+async def explain_agent(agent_type: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """
     Explain what a specific agent does, its capabilities, and recent performance.
     """
@@ -198,7 +199,7 @@ async def explain_agent(agent_type: str, request: Request):
 
 
 @router.get("/decision/{workflow_id}/{agent_type}")
-async def explain_decision(workflow_id: str, agent_type: str, request: Request):
+async def explain_decision(workflow_id: str, agent_type: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """
     Explain a specific agent's decision within a workflow.
     """

@@ -194,14 +194,14 @@ async def get_auth_context(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Demo / development mode — allow unauthenticated read-only
+    # 3. Demo / development mode — allow unauthenticated full access
     if settings.DEMO_MODE or settings.APP_ENV == "development":
         return AuthContext(
             request_id=request_id,
             authenticated=True,
             auth_method="demo",
-            principal="demo-viewer",
-            roles=["viewer"],
+            principal="demo-user",
+            roles=["admin", "operator", "viewer"],
         )
 
     # 4. Reject in production without credentials

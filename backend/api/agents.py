@@ -5,8 +5,10 @@ AutoForge Agent API — Agent status and control endpoints.
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+
+from middleware.auth import AuthContext, get_auth_context
 
 router = APIRouter()
 
@@ -23,7 +25,7 @@ class AgentStatusResponse(BaseModel):
 
 
 @router.get("/")
-async def list_agents(request: Request):
+async def list_agents(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """List all registered agents and their current status."""
     brain = request.app.state.brain
     agents = brain.get_agent_registry()
@@ -48,7 +50,7 @@ async def list_agents(request: Request):
 
 
 @router.get("/{agent_id}")
-async def get_agent_detail(agent_id: str, request: Request):
+async def get_agent_detail(agent_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get detailed status for a specific agent."""
     brain = request.app.state.brain
     agent = brain.get_agent(agent_id)
@@ -68,7 +70,7 @@ async def get_agent_detail(agent_id: str, request: Request):
 
 
 @router.get("/{agent_id}/reasoning")
-async def get_agent_reasoning(agent_id: str, request: Request):
+async def get_agent_reasoning(agent_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get the reasoning tree for an agent's current or last task."""
     brain = request.app.state.brain
     agent = brain.get_agent(agent_id)

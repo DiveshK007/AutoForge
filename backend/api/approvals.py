@@ -12,10 +12,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from logging_config import get_logger
+from middleware.auth import AuthContext, get_auth_context, require_role
 
 log = get_logger("approvals")
 
@@ -136,7 +137,7 @@ class ApprovalDecision(BaseModel):
 # ─── API Endpoints ──────────────────────────────────────────────
 
 @router.get("/pending")
-async def list_pending_approvals():
+async def list_pending_approvals(_auth: AuthContext = Depends(get_auth_context)):
     """List all tasks awaiting human approval."""
     return {
         "pending": approval_queue.get_pending(),
@@ -145,7 +146,7 @@ async def list_pending_approvals():
 
 
 @router.post("/{approval_id}/approve")
-async def approve_task(approval_id: str, body: ApprovalDecision = ApprovalDecision()):
+async def approve_task(approval_id: str, body: ApprovalDecision = ApprovalDecision(), _auth: AuthContext = Depends(require_role("operator"))):
     """Approve a pending task — it will proceed to execution."""
     try:
         req = approval_queue.approve(approval_id, approved_by=body.decided_by)
@@ -173,7 +174,7 @@ async def approve_task(approval_id: str, body: ApprovalDecision = ApprovalDecisi
 
 
 @router.post("/{approval_id}/reject")
-async def reject_task(approval_id: str, body: ApprovalDecision = ApprovalDecision()):
+async def reject_task(approval_id: str, body: ApprovalDecision = ApprovalDecision(), _auth: AuthContext = Depends(require_role("operator"))):
     """Reject a pending task — it will be skipped."""
     try:
         req = approval_queue.reject(approval_id, rejected_by=body.decided_by)
@@ -201,7 +202,7 @@ async def reject_task(approval_id: str, body: ApprovalDecision = ApprovalDecisio
 
 
 @router.get("/history")
-async def approval_history(limit: int = 50):
+async def approval_history(limit: int = 50, _auth: AuthContext = Depends(get_auth_context)):
     """Get recent approval decisions."""
     return {
         "history": approval_queue.get_history(limit),

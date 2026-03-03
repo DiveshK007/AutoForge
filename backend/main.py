@@ -69,7 +69,7 @@ app.add_middleware(CorrelationMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,3 +117,44 @@ async def readiness_probe():
             "version": "1.0.0",
         },
     )
+
+
+@app.get("/api/v1/system/version")
+async def system_version():
+    """Build and runtime version info — for ops dashboards and debugging."""
+    import platform
+    import sys
+    import os
+
+    _git_sha = os.environ.get("GIT_SHA", "")
+    if not _git_sha:
+        try:
+            import subprocess
+            _git_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=os.path.dirname(__file__),
+                stderr=subprocess.DEVNULL,
+            ).decode().strip()
+        except Exception:
+            _git_sha = "unknown"
+
+    return {
+        "name": "AutoForge",
+        "version": "1.0.0",
+        "git_sha": _git_sha,
+        "python": sys.version.split()[0],
+        "platform": platform.system(),
+        "environment": settings.APP_ENV,
+        "demo_mode": settings.DEMO_MODE,
+        "agents": list((app.state.brain.get_agent_registry() if hasattr(app.state, "brain") else {}).keys()),
+        "capabilities": [
+            "multi_agent_orchestration",
+            "self_healing_pipelines",
+            "dag_execution",
+            "cognitive_reasoning",
+            "learning_memory",
+            "human_in_the_loop",
+            "sustainability_tracking",
+            "real_time_websocket",
+        ],
+    }

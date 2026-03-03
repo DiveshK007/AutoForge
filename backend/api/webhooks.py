@@ -11,7 +11,7 @@ import hmac
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 
 from brain.orchestrator import CommandBrain
 from integrations.event_normalizer import EventNormalizer
@@ -20,6 +20,7 @@ from models.events import (
     NormalizedEvent,
     EventType,
 )
+from middleware.auth import AuthContext, require_role
 from logging_config import get_logger
 
 router = APIRouter()
@@ -120,7 +121,7 @@ async def receive_gitlab_webhook(
 
 
 @router.post("/test-trigger")
-async def test_trigger(request: Request):
+async def test_trigger(request: Request, _auth: AuthContext = Depends(require_role("operator"))):
     """
     Manual test trigger for development.
     Accepts a simulated event payload for testing agent workflows.

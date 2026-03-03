@@ -8,13 +8,14 @@ demo-mode precomputed state for impressive first-load experience.
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from demo.engine import (
     DEMO_REASONING_TREES,
     DEMO_ENERGY_ESTIMATES,
     get_demo_scenario,
 )
+from middleware.auth import AuthContext, get_auth_context
 
 router = APIRouter()
 
@@ -168,7 +169,7 @@ def _demo_reasoning_trees() -> Dict[str, Dict[str, Any]]:
 
 
 @router.get("/overview")
-async def get_dashboard_overview(request: Request):
+async def get_dashboard_overview(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get complete dashboard overview data — with rich demo state on first load."""
     brain = request.app.state.brain
     telemetry = request.app.state.telemetry
@@ -232,7 +233,7 @@ async def get_dashboard_overview(request: Request):
 
 
 @router.get("/agents")
-async def get_dashboard_agents(request: Request):
+async def get_dashboard_agents(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get detailed agent status cards for the dashboard."""
     from config import settings
 
@@ -261,7 +262,7 @@ async def get_dashboard_agents(request: Request):
 
 
 @router.get("/workflows")
-async def get_dashboard_workflows(request: Request, limit: int = 20, status: str | None = None):
+async def get_dashboard_workflows(request: Request, limit: int = 20, status: str | None = None, _auth: AuthContext = Depends(get_auth_context)):
     """Get workflow list for the dashboard, optionally filtered by status."""
     brain = request.app.state.brain
     workflows = brain.get_workflows(limit=limit)
@@ -277,13 +278,13 @@ async def get_dashboard_workflows(request: Request, limit: int = 20, status: str
 
 
 @router.get("/activity")
-async def get_activity_feed_compat(request: Request, limit: int = 50):
+async def get_activity_feed_compat(request: Request, limit: int = 50, _auth: AuthContext = Depends(get_auth_context)):
     """Activity feed (frontend-compatible path)."""
     return await get_activity_feed(request, limit=limit)
 
 
 @router.get("/activity-feed")
-async def get_activity_feed(request: Request, limit: int = 50):
+async def get_activity_feed(request: Request, limit: int = 50, _auth: AuthContext = Depends(get_auth_context)):
     """Get real-time activity feed for all agents."""
     from config import settings
 
@@ -318,7 +319,7 @@ _SCENARIO_ALIASES: Dict[str, str] = {
 
 
 @router.get("/reasoning/{workflow_id}")
-async def get_workflow_reasoning(workflow_id: str, request: Request):
+async def get_workflow_reasoning(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get full reasoning visualization data for a workflow."""
     from config import settings
 
@@ -351,7 +352,7 @@ async def get_workflow_reasoning(workflow_id: str, request: Request):
 
 
 @router.get("/learning")
-async def get_learning_dashboard(request: Request):
+async def get_learning_dashboard(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get learning / knowledge-reuse dashboard data."""
     from config import settings
 
@@ -379,7 +380,7 @@ async def get_learning_dashboard(request: Request):
 
 
 @router.get("/carbon")
-async def get_carbon_dashboard(request: Request):
+async def get_carbon_dashboard(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get sustainability / carbon-efficiency dashboard data."""
     from config import settings
 
@@ -417,7 +418,7 @@ _DEMO_RETRIES = [
 
 
 @router.get("/retries/{workflow_id}")
-async def get_workflow_retries(workflow_id: str, request: Request):
+async def get_workflow_retries(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get retry / self-correction history for a workflow."""
     from config import settings
 
@@ -455,7 +456,7 @@ _DEMO_COMM_DATA = {
 
 
 @router.get("/communication/{workflow_id}")
-async def get_agent_communication(workflow_id: str, request: Request):
+async def get_agent_communication(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get agent-to-agent communication graph data for a workflow."""
     from config import settings
 

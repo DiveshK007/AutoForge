@@ -5,13 +5,15 @@ Returns data in shapes the Next.js dashboard expects directly.
 Demo mode returns rich precomputed data for impressive first-load.
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from middleware.auth import AuthContext, get_auth_context
 
 router = APIRouter()
 
 
 @router.get("/metrics")
-async def get_system_metrics(request: Request):
+async def get_system_metrics(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get current system-wide telemetry metrics."""
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
@@ -44,7 +46,7 @@ async def get_system_metrics(request: Request):
 
 
 @router.get("/metrics/history")
-async def get_metrics_history(request: Request, hours: int = 24):
+async def get_metrics_history(request: Request, hours: int = 24, _auth: AuthContext = Depends(get_auth_context)):
     """Get historical metrics over time — returns array for frontend."""
     from config import settings
     from api.dashboard import _DEMO_METRICS_HISTORY
@@ -61,7 +63,7 @@ async def get_metrics_history(request: Request, hours: int = 24):
 
 
 @router.get("/metrics/success-rate")
-async def get_success_rate(request: Request):
+async def get_success_rate(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get current workflow success rate."""
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
@@ -73,7 +75,7 @@ async def get_success_rate(request: Request):
 
 
 @router.get("/metrics/fix-time")
-async def get_fix_time(request: Request):
+async def get_fix_time(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get average fix time metrics."""
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
@@ -84,7 +86,7 @@ async def get_fix_time(request: Request):
 
 
 @router.get("/metrics/collaboration")
-async def get_collaboration_metrics(request: Request):
+async def get_collaboration_metrics(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get agent collaboration metrics."""
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
@@ -95,7 +97,7 @@ async def get_collaboration_metrics(request: Request):
 
 
 @router.get("/metrics/reasoning-depth")
-async def get_reasoning_depth(request: Request):
+async def get_reasoning_depth(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get average reasoning depth across agents."""
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
@@ -106,7 +108,7 @@ async def get_reasoning_depth(request: Request):
 
 
 @router.get("/metrics/memory-reuse")
-async def get_memory_reuse(request: Request):
+async def get_memory_reuse(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get memory utilisation and knowledge reuse stats."""
     telemetry = request.app.state.telemetry
     metrics = await telemetry.get_current_metrics()
@@ -117,7 +119,7 @@ async def get_memory_reuse(request: Request):
 
 
 @router.get("/reasoning-trees")
-async def get_reasoning_trees(request: Request, limit: int = 10):
+async def get_reasoning_trees(request: Request, limit: int = 10, _auth: AuthContext = Depends(get_auth_context)):
     """Get recent reasoning trees — returns dict keyed by scenario/workflow for frontend."""
     from config import settings
     from api.dashboard import _demo_reasoning_trees
@@ -142,7 +144,7 @@ async def get_reasoning_trees(request: Request, limit: int = 10):
 
 
 @router.get("/learning-curve")
-async def get_learning_curve(request: Request):
+async def get_learning_curve(request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get learning improvement data — returns array for frontend."""
     from config import settings
     from api.dashboard import _DEMO_LEARNING_CURVE

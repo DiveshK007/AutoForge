@@ -7,9 +7,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from models.events import EventType, NormalizedEvent
+from middleware.auth import AuthContext, get_auth_context, require_role
 from logging_config import get_logger
 
 router = APIRouter()
@@ -20,7 +21,7 @@ _DEMO_DIR = Path(__file__).resolve().parents[2] / "demo_scenarios"
 
 
 @router.get("/")
-async def list_workflows(request: Request, limit: int = 20, offset: int = 0):
+async def list_workflows(request: Request, limit: int = 20, offset: int = 0, _auth: AuthContext = Depends(get_auth_context)):
     """List all workflows with pagination."""
     brain = request.app.state.brain
     workflows = brain.get_workflows(limit=limit, offset=offset)
@@ -34,7 +35,7 @@ async def list_workflows(request: Request, limit: int = 20, offset: int = 0):
 
 
 @router.get("/{workflow_id}")
-async def get_workflow(workflow_id: str, request: Request):
+async def get_workflow(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get detailed workflow state."""
     brain = request.app.state.brain
     workflow = brain.get_workflow(workflow_id)
@@ -52,7 +53,7 @@ async def get_workflow(workflow_id: str, request: Request):
 
 
 @router.post("/{workflow_id}/cancel")
-async def cancel_workflow(workflow_id: str, request: Request):
+async def cancel_workflow(workflow_id: str, request: Request, _auth: AuthContext = Depends(require_role("operator"))):
     """Cancel an active workflow."""
     brain = request.app.state.brain
     result = await brain.cancel_workflow(workflow_id)
@@ -61,7 +62,7 @@ async def cancel_workflow(workflow_id: str, request: Request):
 
 
 @router.get("/{workflow_id}/timeline")
-async def get_workflow_timeline(workflow_id: str, request: Request):
+async def get_workflow_timeline(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get detailed timeline of a workflow execution."""
     brain = request.app.state.brain
     workflow = brain.get_workflow(workflow_id)
@@ -78,7 +79,7 @@ async def get_workflow_timeline(workflow_id: str, request: Request):
 
 
 @router.get("/{workflow_id}/reasoning")
-async def get_workflow_reasoning(workflow_id: str, request: Request):
+async def get_workflow_reasoning(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get the full reasoning chain for a workflow."""
     brain = request.app.state.brain
     workflow = brain.get_workflow(workflow_id)
@@ -103,7 +104,7 @@ async def get_workflow_reasoning(workflow_id: str, request: Request):
 
 
 @router.get("/{workflow_id}/telemetry")
-async def get_workflow_telemetry(workflow_id: str, request: Request):
+async def get_workflow_telemetry(workflow_id: str, request: Request, _auth: AuthContext = Depends(get_auth_context)):
     """Get telemetry snapshot scoped to a single workflow."""
     brain = request.app.state.brain
     workflow = brain.get_workflow(workflow_id)
@@ -132,7 +133,7 @@ async def get_workflow_telemetry(workflow_id: str, request: Request):
 # ── Demo endpoints ───────────────────────────────────────────────
 
 @router.get("/demo/scenarios")
-async def list_demo_scenarios():
+async def list_demo_scenarios(_auth: AuthContext = Depends(get_auth_context)):
     """List available demo scenarios."""
     scenarios = []
     if _DEMO_DIR.exists():
@@ -151,7 +152,7 @@ async def list_demo_scenarios():
 
 
 @router.post("/demo/run/{scenario_id}")
-async def run_demo_scenario(scenario_id: str, request: Request):
+async def run_demo_scenario(scenario_id: str, request: Request, _auth: AuthContext = Depends(require_role("operator"))):
     """
     Trigger a demo scenario by name (stem of the JSON file).
 
@@ -191,7 +192,7 @@ async def run_demo_scenario(scenario_id: str, request: Request):
 # ─── Celery Result Tracking ─────────────────────────────────────
 
 @router.get("/celery-status/{celery_task_id}")
-async def celery_task_status(celery_task_id: str):
+async def celery_task_status(celery_task_id: str, _auth: AuthContext = Depends(get_auth_context)):
     """
     Query the status and result of a Celery-dispatched task.
 

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60
 
+    # ─── CORS ───
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
     # ─── Rate Limiting ───
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_DEFAULT_RPM: int = 60  # requests per minute
