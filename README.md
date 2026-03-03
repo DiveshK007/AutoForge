@@ -1,19 +1,44 @@
 # 🔥 AutoForge — Autonomous AI Engineering Orchestrator for GitLab
 
-> An autonomous multi-agent system that monitors, diagnoses, fixes, secures, optimizes, and documents your software lifecycle — without human intervention.
+> Six AI agents that autonomously diagnose, fix, secure, test, review, and optimize your GitLab projects — with built-in sustainability tracking.
 
-**This is not one agent. This is an AI DevOps Organization inside GitLab.**
+**Built on the GitLab Duo Agent Platform for the [GitLab AI Hackathon](https://gitlab.devpost.com/).**
 
-[![CI/CD](https://github.com/DiveshK007/AutoForge/actions/workflows/ci.yml/badge.svg)](https://github.com/DiveshK007/AutoForge/actions)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-440%20passing-brightgreen)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-464%20passing-brightgreen)](#-testing)
+[![GitLab Duo](https://img.shields.io/badge/GitLab%20Duo-Agent%20Platform-orange)](https://docs.gitlab.com/user/duo_agent_platform/)
+
+### 🏆 Prize Targeting
+| Category | Our Angle |
+|----------|-----------|
+| **Grand Prize** ($15K) | Multi-agent orchestration + cognitive reasoning + GreenOps |
+| **Most Technically Impressive** ($5K) | Tree-of-thought reasoning, DAG workflows, 464 tests |
+| **Green Agent Prize** ($3K) | GreenOps energy/carbon auditing + pipeline optimization |
+| **Sustainable Design Bonus** ($500×4) | Energy-efficient architecture choices |
+| **GitLab & Anthropic** ($10K) | Claude-powered reasoning via GitLab Duo |
+| **Most Impactful** ($5K) | Solves real pipeline failure, security, and sustainability pain |
 
 ---
 
 ## 🧠 What is AutoForge?
 
-AutoForge is an event-driven, multi-agent DevOps automation platform that reasons over software lifecycle signals and autonomously executes remediation, validation, documentation, and optimization workflows.
+AutoForge is an event-driven, multi-agent DevOps automation platform built on the **GitLab Duo Agent Platform**. It uses Claude (via GitLab Duo) to reason over software lifecycle signals and autonomously execute remediation, validation, documentation, and optimization workflows.
+
+### GitLab Duo Agent Platform Integration
+
+AutoForge registers as **3 custom flows** and **3 custom agents** on GitLab Duo:
+
+| Flow/Agent | Type | What It Does |
+|------------|------|-------------|
+| 🛠 SRE Pipeline Fix | Flow (4 components) | Perceive → Reason → Act → Reflect on pipeline failures |
+| 🔐 Security Vulnerability Fix | Flow (3 components) | Scan → Assess → Patch security issues |
+| 🌱 GreenOps Sustainability Audit | Flow (3 components) | Audit → Analyze → Optimize for energy efficiency |
+| 🛠 SRE Agent | Custom Agent | Interactive pipeline diagnosis via Duo Chat |
+| 🔐 Security Agent | Custom Agent | Interactive security review via Duo Chat |
+| 🌱 GreenOps Agent | Custom Agent | Interactive sustainability audit via Duo Chat |
+
+See [`gitlab_duo/`](gitlab_duo/) for all flow YAML configs and agent system prompts.
 
 ### The AI Engineering Workforce
 
@@ -293,7 +318,7 @@ Each agent generates:
 
 ## 🧪 Testing
 
-**440 tests** — all passing.
+**464 tests** — all passing.
 
 | Suite | Count | What It Covers |
 |-------|-------|----------------|
@@ -304,7 +329,9 @@ Each agent generates:
 | Full Implementation | 82 | DB layer, JWT, Celery, retry/comm APIs, persistence |
 | Integration Layer | 100 | GitLab client, services, tools, webhook processing |
 | Integration (bash) | 62 | Full-stack end-to-end via HTTP |
-| **Total** | **440** | |
+| Audit Gap | 51 | Vector store, persistent workflows, HMAC, approvals |
+| Production Readiness | 35 | RBAC, CORS, auth middleware |
+| **Total** | **464** | |
 
 ```bash
 # Run all pytest tests
@@ -428,6 +455,15 @@ AutoForge/
 │       ├── components/        # 9 component directories
 │       └── lib/api.ts         # Typed API client
 ├── docs/architecture/          # Design docs (ARCHITECTURE, MEMORY, AGENTS)
+├── gitlab_duo/                 # GitLab Duo Agent Platform configs
+│   ├── agents/                # System prompts for custom agents
+│   │   ├── sre_agent_prompt.md
+│   │   ├── security_agent_prompt.md
+│   │   └── greenops_agent_prompt.md
+│   └── flows/                 # Flow Registry v1 YAML configs
+│       ├── autoforge_sre_flow.yaml
+│       ├── autoforge_security_flow.yaml
+│       └── autoforge_greenops_flow.yaml
 ├── prompts/                    # YAML prompt templates
 ├── infra/terraform/            # IaC stubs (GCP Cloud Run)
 ├── .github/workflows/ci.yml   # CI: tests, lint, Docker build, security scan
@@ -435,6 +471,8 @@ AutoForge/
 ├── Dockerfile                  # Backend + worker image
 ├── Dockerfile.dashboard        # Dashboard image
 ├── Makefile                    # Dev commands
+├── AGENTS.md                   # GitLab Duo agent behavior config
+├── LICENSE                     # MIT License
 ├── test_autoforge.sh           # 62-test integration suite
 └── pyproject.toml              # Python project config
 ```
@@ -443,9 +481,30 @@ AutoForge/
 
 ## 🏆 Hackathon Prize Targeting
 
-- **Most Technically Impressive**: Multi-agent DAG orchestration + autonomous remediation + 440 tests
-- **Anthropic Integration**: Claude Sonnet 4 reasoning engine with extended thinking
-- **Sustainability**: GreenOps carbon optimization agent
+AutoForge targets multiple prize categories in the [GitLab AI Hackathon](https://gitlab.devpost.com/):
+
+| Prize | Amount | Our Differentiator |
+|-------|--------|-------------------|
+| Grand Prize | $15,000 | Multi-agent DAG orchestration + autonomous remediation + 464 tests |
+| Most Technically Impressive | $5,000 | Tree-of-thought reasoning, evidence-weighted hypotheses, cognitive pipeline |
+| Green Agent Prize | $3,000 | GreenOps energy/carbon auditing with real kWh/CO₂ calculations |
+| Sustainable Design Bonus | $500×4 | Energy-efficient pipeline optimization, conservative estimates |
+| GitLab & Anthropic | $10,000 | Claude-powered reasoning engine via GitLab Duo Agent Platform |
+| Most Impactful | $5,000 | Solves real DevOps pain: pipeline failures, security vulns, sustainability |
+
+### GitLab Duo Agent Platform Artifacts
+
+```
+gitlab_duo/
+├── agents/
+│   ├── sre_agent_prompt.md        # SRE Agent system prompt
+│   ├── security_agent_prompt.md   # Security Agent system prompt
+│   └── greenops_agent_prompt.md   # GreenOps Agent system prompt
+└── flows/
+    ├── autoforge_sre_flow.yaml         # Pipeline Fix flow (v1 YAML)
+    ├── autoforge_security_flow.yaml    # Vulnerability Fix flow (v1 YAML)
+    └── autoforge_greenops_flow.yaml    # Sustainability Audit flow (v1 YAML)
+```
 
 ---
 
