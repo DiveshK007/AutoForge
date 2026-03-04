@@ -162,9 +162,3 @@ deploy-staging:
   when: manual
   environment:
     name: staging
-
-# ------------------------------------------------------------------
-# Hackathon catalog sync (inherited from template)
-# ------------------------------------------------------------------
-include:
-  - component: gitlab.com/gitlab-org/gitlab/-/raw/master/lib/gitlab/ci/templates/catalog-sync.yml
