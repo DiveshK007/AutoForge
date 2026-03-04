@@ -21,6 +21,46 @@
 
 ---
 
+## 🎯 Hackathon Results — Live Evidence
+
+> **All 6 AI Catalog items published. All 3 agents tested. All 3 flows completed successfully.**
+
+### AI Catalog Items (6 published)
+
+| # | Item | Type | Status |
+|---|------|------|--------|
+| 1 | AutoForge SRE Agent | Agent | ✅ Published |
+| 2 | AutoForge Security Agent | Agent | ✅ Published |
+| 3 | AutoForge GreenOps Agent | Agent | ✅ Published |
+| 4 | AutoForge SRE — Pipeline Fix | Flow (4 components) | ✅ Published |
+| 5 | AutoForge Security — Vulnerability Fix | Flow (3 components) | ✅ Published |
+| 6 | AutoForge GreenOps — Sustainability Audit | Flow (3 components) | ✅ Published |
+
+### Agent Testing (via Duo Chat)
+
+| Agent | Action | Evidence |
+|-------|--------|----------|
+| 🛠 SRE Agent | Created pipeline fix MR | [MR !6](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/merge_requests/6) |
+| 🔐 Security Agent | Found 12 vulnerabilities | [Issues #4–#15](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues) |
+| 🌱 GreenOps Agent | Pipeline efficiency audit (48/100) | [Issue #3](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/3) |
+
+### Flow Execution (via @mention triggers → duo_workflow pipelines)
+
+| Flow | Trigger | Session | Pipeline | Status |
+|------|---------|---------|----------|--------|
+| 🛠 SRE Pipeline Fix | [MR !6](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/merge_requests/6) | [#3046329](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046329) | [#2363023638](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/pipelines/2363023638) | ✅ SUCCESS |
+| 🔐 Security Vuln Fix | [Issue #16](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/16) | [#3046331](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046331) | [#2363023377](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/pipelines/2363023377) | ✅ SUCCESS |
+| 🌱 GreenOps Audit | [Issue #17](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/17) | [#3046334](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046334) | [#2363023217](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/pipelines/2363023217) | ✅ SUCCESS |
+
+### Key Technical Highlights
+
+- **Zero external infrastructure** — everything runs natively on GitLab Duo with Anthropic Claude built-in
+- **Tree-of-Thought reasoning** — agents generate multiple hypotheses with confidence scores
+- **5-phase cognitive pipeline** — Perceive → Reason → Plan → Act → Reflect
+- **Real GreenOps energy model** — TDP × duration × cores × PUE × grid carbon intensity
+
+---
+
 ## 🧠 What is AutoForge?
 
 AutoForge is an event-driven, multi-agent DevOps automation platform built on the **GitLab Duo Agent Platform**. It uses Claude (via GitLab Duo) to reason over software lifecycle signals and autonomously execute remediation, validation, documentation, and optimization workflows.
@@ -485,25 +525,23 @@ AutoForge targets multiple prize categories in the [GitLab AI Hackathon](https:/
 
 | Prize | Amount | Our Differentiator |
 |-------|--------|-------------------|
-| Grand Prize | $15,000 | Multi-agent DAG orchestration + autonomous remediation + 464 tests |
-| Most Technically Impressive | $5,000 | Tree-of-thought reasoning, evidence-weighted hypotheses, cognitive pipeline |
-| Green Agent Prize | $3,000 | GreenOps energy/carbon auditing with real kWh/CO₂ calculations |
-| Sustainable Design Bonus | $500×4 | Energy-efficient pipeline optimization, conservative estimates |
-| GitLab & Anthropic | $10,000 | Claude-powered reasoning engine via GitLab Duo Agent Platform |
-| Most Impactful | $5,000 | Solves real DevOps pain: pipeline failures, security vulns, sustainability |
+| Best Overall Project | $5,000 | Complete multi-agent system — 6 catalog items, all working end-to-end |
+| Best Use of Anthropic on GitLab | $4,500 | All agents powered by Anthropic Claude via GitLab Duo, Tree-of-Thought reasoning |
+| Best Green Agent | $4,000 | GreenOps agent with real energy model (TDP × duration × cores × PUE × grid carbon intensity) |
+| Most Creative Use of GitLab Duo | $1,000 | @mention-triggered autonomous flows with 5-phase cognitive pipelines |
 
 ### GitLab Duo Agent Platform Artifacts
 
 ```
-gitlab_duo/
-├── agents/
-│   ├── sre_agent_prompt.md        # SRE Agent system prompt
-│   ├── security_agent_prompt.md   # Security Agent system prompt
-│   └── greenops_agent_prompt.md   # GreenOps Agent system prompt
-└── flows/
-    ├── autoforge_sre_flow.yaml         # Pipeline Fix flow (v1 YAML)
-    ├── autoforge_security_flow.yaml    # Vulnerability Fix flow (v1 YAML)
-    └── autoforge_greenops_flow.yaml    # Sustainability Audit flow (v1 YAML)
+agents/
+├── sre_agent.yml           # SRE Agent — pipeline diagnosis & fix
+├── security_agent.yml      # Security Agent — vulnerability scanning & patching
+└── greenops_agent.yml      # GreenOps Agent — sustainability audit & carbon tracking
+
+flows/
+├── sre_flow.yml            # Pipeline Fix flow (4 components: perceive→reason→act→reflect)
+├── security_flow.yml       # Vulnerability Fix flow (3 components: scan→assess→patch)
+└── greenops_flow.yml       # Sustainability Audit flow (3 components: audit→calculate→optimize)
 ```
 
 ---

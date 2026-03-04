@@ -13,16 +13,19 @@ services:
       - PYTHONPATH=/app/backend
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
-      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_API_TOKEN=${GITLAB_API_TOKEN}
       - GITLAB_WEBHOOK_SECRET=${GITLAB_WEBHOOK_SECRET:-autoforge-secret}
+      - GITLAB_DEFAULT_PROJECT_ID=${GITLAB_DEFAULT_PROJECT_ID:-79947901}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - DATABASE_URL=postgresql://autoforge:autoforge@postgres:5432/autoforge
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8100
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - DEMO_MODE=${DEMO_MODE:-true}
+      - DEMO_MODE=${DEMO_MODE:-false}
       - CORS_ORIGINS=http://localhost:3000,http://dashboard:3000
+      - SECRET_KEY=${SECRET_KEY:-autoforge-secret-key}
+      - JWT_SECRET=${JWT_SECRET:-autoforge-jwt-secret}
     depends_on:
       redis:
         condition: service_healthy
@@ -48,13 +51,14 @@ services:
       - PYTHONPATH=/app/backend
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
-      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_API_TOKEN=${GITLAB_API_TOKEN}
+      - GITLAB_DEFAULT_PROJECT_ID=${GITLAB_DEFAULT_PROJECT_ID:-79947901}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - DATABASE_URL=postgresql://autoforge:autoforge@postgres:5432/autoforge
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8100
-      - DEMO_MODE=${DEMO_MODE:-true}
+      - DEMO_MODE=${DEMO_MODE:-false}
     depends_on:
       redis:
         condition: service_healthy

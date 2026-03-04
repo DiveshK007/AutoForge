@@ -25,3 +25,6 @@ dashboard/node_modules/
 chroma_data/
 .DS_Store
 Thumbs.db
+
+# Local helper scripts (contain PATs / API tokens)
+scripts/
