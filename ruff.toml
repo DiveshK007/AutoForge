@@ -1,0 +1,29 @@
+# Ruff configuration for AutoForge
+# https://docs.astral.sh/ruff/configuration/
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+# Enable common rule sets
+select = ["E", "F", "W"]
+
+# Ignore rules that conflict with existing code style
+ignore = [
+    "E501",   # line too long (handled by line-length)
+    "E741",   # ambiguous variable name
+    "F841",   # unused variable (often intentional in tests)
+    "W291",   # trailing whitespace
+    "W292",   # no newline at end of file
+    "W293",   # whitespace before ':'
+]
+
+[lint.per-file-ignores]
+"backend/tests/*" = ["E", "F", "W"]  # Relax linting in tests
+"backend/demo/*" = ["E", "F", "W"]   # Demo data files
+"backend/worker.py" = ["E402"]       # Celery signals need late import
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

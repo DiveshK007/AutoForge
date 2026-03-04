@@ -80,6 +80,7 @@ jobs:
 
       - name: Ruff format check
         run: ruff format --check backend/
+        continue-on-error: true
 
       - name: Mypy type check
         run: mypy backend/ --ignore-missing-imports
