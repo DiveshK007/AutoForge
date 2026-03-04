@@ -1,0 +1,17 @@
+# AutoForge Flow Execution Configuration
+# This configures how flows run in GitLab CI/CD
+
+image: python:3.11-slim
+
+setup_script:
+  - apt-get update && apt-get install -y git nodejs npm curl
+  - pip install --upgrade pip
+  - pip install -r backend/requirements.txt || true
+
+cache:
+  key:
+    files:
+      - backend/requirements.txt
+    prefix: autoforge-deps
+  paths:
+    - .cache/pip
