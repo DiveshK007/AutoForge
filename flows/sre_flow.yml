@@ -1,0 +1,235 @@
+name: "AutoForge SRE — Pipeline Fix"
+description: "Autonomous pipeline failure diagnosis and remediation. Follows a 4-phase cognitive pipeline: Perceive failure → Reason with Tree-of-Thought → Apply fix → Reflect. Creates merge requests with confidence-scored fixes."
+public: true
+definition:
+  version: v1
+  environment: ambient
+
+  components:
+    - name: "perceive_failure"
+      type: AgentComponent
+      prompt_id: "autoforge_sre_perceive"
+      inputs: ["context:goal"]
+      toolset:
+        - get_pipeline_errors
+        - get_job_logs
+        - get_merge_request
+        - list_merge_request_diffs
+        - get_commit
+        - get_commit_diff
+        - read_file
+        - find_files
+        - grep
+      ui_log_events:
+        - on_agent_final_answer
+        - on_tool_execution_success
+        - on_tool_execution_failed
+
+    - name: "reason_and_plan"
+      type: AgentComponent
+      prompt_id: "autoforge_sre_reason"
+      inputs:
+        - from: "context:perceive_failure.final_answer"
+          as: "failure_analysis"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - read_file
+        - find_files
+        - get_repository_file
+        - grep
+        - list_dir
+      ui_log_events:
+        - on_agent_final_answer
+
+    - name: "apply_fix"
+      type: AgentComponent
+      prompt_id: "autoforge_sre_act"
+      inputs:
+        - from: "context:reason_and_plan.final_answer"
+          as: "fix_plan"
+        - from: "context:perceive_failure.final_answer"
+          as: "failure_context"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - read_file
+        - edit_file
+        - create_file_with_contents
+        - create_merge_request
+        - create_merge_request_note
+      ui_log_events:
+        - on_agent_final_answer
+        - on_tool_execution_success
+        - on_tool_execution_failed
+
+    - name: "reflect"
+      type: AgentComponent
+      prompt_id: "autoforge_sre_reflect"
+      inputs:
+        - from: "context:apply_fix.final_answer"
+          as: "action_result"
+        - from: "context:reason_and_plan.final_answer"
+          as: "diagnosis"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - create_issue_note
+        - create_merge_request_note
+      ui_log_events:
+        - on_agent_final_answer
+
+  prompts:
+    - prompt_id: "autoforge_sre_perceive"
+      name: "AutoForge SRE Perceive"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge SRE Agent in the PERCEIVE phase.
+          Your job is to gather all relevant information about a CI/CD pipeline failure.
+
+          Steps:
+          1. Use get_pipeline_errors or get_job_logs to read the failing job output
+          2. Use get_commit and get_commit_diff to see recent changes
+          3. Use read_file to examine relevant config files (.gitlab-ci.yml, requirements.txt, package.json, etc.)
+          4. Use grep to search for error patterns in the codebase
+
+          Produce a structured failure report with:
+          - Error type (dependency, syntax, config, infra, test, permission)
+          - Key error messages from logs
+          - Relevant file paths
+          - Recent changes that may have caused the failure
+          - Failure signals detected
+        user: |
+          Investigate this pipeline failure and gather all relevant context:
+
+          {{goal}}
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_sre_reason"
+      name: "AutoForge SRE Reason and Plan"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge SRE Agent in the REASON and PLAN phase.
+          Given the failure analysis from the perceive phase, generate a structured diagnosis.
+
+          ## Reasoning Process (Tree-of-Thought)
+
+          Generate exactly 5 hypotheses for the root cause. For each:
+          1. Description of what went wrong
+          2. Probability (0.0-1.0, should sum to ~1.0)
+          3. Evidence from the logs/code supporting this hypothesis
+          4. Risk if this hypothesis is wrong (0.0-1.0)
+          5. Suggested fix action
+
+          ## Planning Process
+
+          Select the best hypothesis and create a fix plan:
+          - chosen_hypothesis: which one and why
+          - chosen_action: exact steps to fix
+          - files_to_modify: list of files and changes
+          - branch_name: autoforge/fix-<descriptive-name>
+          - commit_message: conventional commit format
+          - confidence: your confidence in this fix (0.0-1.0)
+          - risk_score: risk of this fix causing new issues (0.0-1.0)
+          - alternative_actions: backup strategies if primary fix fails
+
+          If confidence is below 0.6, recommend flagging for human review instead.
+        user: |
+          Original request: {{original_request}}
+
+          ## Failure Analysis from Perceive Phase:
+          {{failure_analysis}}
+
+          Now generate your hypotheses and fix plan.
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_sre_act"
+      name: "AutoForge SRE Act"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge SRE Agent in the ACT phase.
+          Apply the fix plan by modifying files and creating a merge request.
+
+          Rules:
+          - Create a branch with the name from the fix plan
+          - Make ONLY the changes specified in the fix plan
+          - Keep changes minimal — under 500 lines
+          - NEVER modify main, master, production, release, or staging branches
+          - Write a clear MR description including:
+              ## 🔧 AutoForge Automated Fix
+              ### Root Cause Analysis
+              (from diagnosis)
+              ### Fix Applied
+              (what changed)
+              ### Files Modified
+              (list of files)
+              ### Confidence Score
+              (X%)
+              ### Risk Assessment
+              (low/medium/high with explanation)
+              ---
+              *🤖 Generated by AutoForge SRE Agent*
+          - Use conventional commit messages (fix: ...)
+        user: |
+          Original request: {{original_request}}
+
+          ## Failure Context:
+          {{failure_context}}
+
+          ## Fix Plan:
+          {{fix_plan}}
+
+          Now apply the fix: edit/create files, then create a merge request.
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_sre_reflect"
+      name: "AutoForge SRE Reflect"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge SRE Agent in the REFLECT phase.
+          Summarize what was done and provide recommendations.
+
+          Your reflection should include:
+          1. What was diagnosed and fixed
+          2. Confidence in the fix
+          3. Potential side effects to watch for
+          4. Preventive measures to avoid this failure in the future
+          5. Lessons learned
+
+          Post a summary comment on the issue or MR.
+        user: |
+          Original request: {{original_request}}
+
+          ## Diagnosis:
+          {{diagnosis}}
+
+          ## Action Taken:
+          {{action_result}}
+
+          Reflect on the outcome and post a summary.
+        placeholder: history
+      params:
+        timeout: 120
+
+  routers:
+    - from: "perceive_failure"
+      to: "reason_and_plan"
+    - from: "reason_and_plan"
+      to: "apply_fix"
+    - from: "apply_fix"
+      to: "reflect"
+    - from: "reflect"
+      to: "end"
+
+  flow:
+    entry_point: "perceive_failure"

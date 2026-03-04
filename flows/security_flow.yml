@@ -1,0 +1,196 @@
+name: "AutoForge Security — Vulnerability Fix"
+description: "Detects security vulnerabilities in merge requests and dependencies. Analyzes code for injection, XSS, auth bypass risks. Creates fix MRs with patches for known CVEs and code-level vulnerabilities."
+public: true
+definition:
+  version: v1
+  environment: ambient
+
+  components:
+    - name: "scan_for_vulnerabilities"
+      type: AgentComponent
+      prompt_id: "autoforge_security_scan"
+      inputs: ["context:goal"]
+      toolset:
+        - get_merge_request
+        - list_merge_request_diffs
+        - read_file
+        - read_files
+        - find_files
+        - grep
+        - get_commit_diff
+        - get_repository_file
+        - list_vulnerabilities
+        - get_vulnerability_details
+      ui_log_events:
+        - on_agent_final_answer
+        - on_tool_execution_success
+        - on_tool_execution_failed
+
+    - name: "assess_and_plan"
+      type: AgentComponent
+      prompt_id: "autoforge_security_assess"
+      inputs:
+        - from: "context:scan_for_vulnerabilities.final_answer"
+          as: "scan_results"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - read_file
+        - grep
+        - find_files
+      ui_log_events:
+        - on_agent_final_answer
+
+    - name: "apply_patches"
+      type: AgentComponent
+      prompt_id: "autoforge_security_fix"
+      inputs:
+        - from: "context:assess_and_plan.final_answer"
+          as: "fix_plan"
+        - from: "context:scan_for_vulnerabilities.final_answer"
+          as: "scan_results"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - read_file
+        - edit_file
+        - create_file_with_contents
+        - create_merge_request
+        - create_merge_request_note
+        - create_issue
+        - create_vulnerability_issue
+      ui_log_events:
+        - on_agent_final_answer
+        - on_tool_execution_success
+        - on_tool_execution_failed
+
+  prompts:
+    - prompt_id: "autoforge_security_scan"
+      name: "AutoForge Security Scan"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge Security Agent in the SCAN phase.
+
+          Analyze the target for security vulnerabilities:
+
+          1. Read merge request diffs to see what code changed
+          2. Check dependency files (requirements.txt, package.json, Gemfile, go.mod, pom.xml)
+          3. Look for version numbers of dependencies and compare against known vulnerable versions
+          4. Scan code changes for:
+             - SQL injection (string concatenation in queries)
+             - Command injection (os.system, subprocess with shell=True)
+             - XSS (unescaped user input in templates/responses)
+             - Path traversal (unsanitized file paths)
+             - Hardcoded secrets (API keys, passwords, tokens in code)
+             - Insecure deserialization (pickle.loads, yaml.load without SafeLoader)
+             - Missing authentication/authorization checks
+             - CORS misconfiguration
+             - Missing input validation
+          5. Check for any existing vulnerability reports using list_vulnerabilities
+
+          Produce a structured scan report with each finding including:
+          - Vulnerability type
+          - Severity (Critical/High/Medium/Low)
+          - File and line number
+          - Evidence (the vulnerable code)
+          - CVE ID if applicable
+        user: |
+          Scan for security vulnerabilities:
+
+          {{goal}}
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_security_assess"
+      name: "AutoForge Security Assess"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge Security Agent in the ASSESSMENT phase.
+
+          Given the scan results, prioritize and plan fixes:
+
+          1. Rank vulnerabilities by severity (Critical > High > Medium > Low)
+          2. For each Critical/High vulnerability, create a fix plan:
+             - Exact file and code to modify
+             - The safe replacement code
+             - Breaking change risk assessment
+          3. For dependency CVEs:
+             - Identify the minimum safe version
+             - Check for breaking changes in the upgrade
+          4. For code vulnerabilities:
+             - Write the minimal secure patch
+             - Ensure the fix doesn't break existing functionality
+
+          If no Critical/High issues found, still report Medium/Low findings
+          as informational with recommendations.
+        user: |
+          Original request: {{original_request}}
+
+          ## Scan Results:
+          {{scan_results}}
+
+          Assess severity and create fix plans for each vulnerability.
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_security_fix"
+      name: "AutoForge Security Fix"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge Security Agent in the FIX phase.
+
+          Apply security patches based on the fix plan:
+
+          For Critical/High vulnerabilities:
+          1. Edit the vulnerable files with the secure patches
+          2. Create a merge request with description:
+              ## 🔐 AutoForge Security Fix
+              ### Vulnerabilities Addressed
+              (table: type, severity, CVE, file)
+              ### Patches Applied
+              (description of each fix)
+              ### Risk Assessment
+              (breaking change risk)
+              ### Remediation Timeline
+              (urgency recommendation)
+              ---
+              *🔐 Generated by AutoForge Security Agent*
+
+          For Medium/Low or informational findings:
+          1. Add a comment on the MR with the findings
+          2. Or create an issue tracking the technical debt
+
+          Rules:
+          - NEVER downgrade security controls
+          - NEVER remove authentication or authorization checks
+          - Use the most conservative fix available
+          - Pin dependency versions in fixes
+        user: |
+          Original request: {{original_request}}
+
+          ## Scan Results:
+          {{scan_results}}
+
+          ## Fix Plan:
+          {{fix_plan}}
+
+          Now apply the security patches.
+        placeholder: history
+      params:
+        timeout: 180
+
+  routers:
+    - from: "scan_for_vulnerabilities"
+      to: "assess_and_plan"
+    - from: "assess_and_plan"
+      to: "apply_patches"
+    - from: "apply_patches"
+      to: "end"
+
+  flow:
+    entry_point: "scan_for_vulnerabilities"

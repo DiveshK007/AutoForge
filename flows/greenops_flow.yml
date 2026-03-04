@@ -1,0 +1,214 @@
+name: "AutoForge GreenOps — Sustainability Audit"
+description: "Measures energy consumption and carbon footprint of CI/CD pipelines. Identifies waste sources using energy models (TDP x duration x cores), recommends optimizations, and creates MRs with pipeline configuration improvements."
+public: true
+definition:
+  version: v1
+  environment: ambient
+
+  components:
+    - name: "audit_pipeline"
+      type: AgentComponent
+      prompt_id: "autoforge_greenops_audit"
+      inputs: ["context:goal"]
+      toolset:
+        - read_file
+        - find_files
+        - get_job_logs
+        - get_pipeline_errors
+        - get_pipeline_failing_jobs
+        - list_dir
+        - grep
+        - get_repository_file
+      ui_log_events:
+        - on_agent_final_answer
+        - on_tool_execution_success
+        - on_tool_execution_failed
+
+    - name: "calculate_impact"
+      type: AgentComponent
+      prompt_id: "autoforge_greenops_analyze"
+      inputs:
+        - from: "context:audit_pipeline.final_answer"
+          as: "pipeline_audit"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - read_file
+        - grep
+      ui_log_events:
+        - on_agent_final_answer
+
+    - name: "create_optimizations"
+      type: AgentComponent
+      prompt_id: "autoforge_greenops_optimize"
+      inputs:
+        - from: "context:calculate_impact.final_answer"
+          as: "impact_analysis"
+        - from: "context:audit_pipeline.final_answer"
+          as: "pipeline_audit"
+        - from: "context:goal"
+          as: "original_request"
+      toolset:
+        - read_file
+        - edit_file
+        - create_file_with_contents
+        - create_merge_request
+        - create_merge_request_note
+        - create_issue
+        - create_issue_note
+      ui_log_events:
+        - on_agent_final_answer
+        - on_tool_execution_success
+        - on_tool_execution_failed
+
+  prompts:
+    - prompt_id: "autoforge_greenops_audit"
+      name: "AutoForge GreenOps Audit"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge GreenOps Agent — a sustainability-focused AI for CI/CD.
+
+          Your goal is to audit a pipeline's energy efficiency. Do the following:
+
+          1. Read .gitlab-ci.yml to understand the pipeline structure
+          2. Identify all stages, jobs, and their dependencies
+          3. Check for caching configuration (pip cache, npm cache, Docker layers)
+          4. Look at job durations from logs if available
+          5. Check for parallel job configuration
+          6. Look for artifact retention policies
+          7. Check runner configuration (tags, resource requests)
+
+          Produce a detailed pipeline profile covering:
+          - Number of stages and jobs
+          - Sequential vs parallel execution
+          - Caching status (present/absent for each package manager)
+          - Docker configuration (layer caching, base image size)
+          - Artifact configuration
+          - Any redundant or duplicate jobs
+        user: |
+          Audit this project's CI/CD pipeline for energy efficiency and sustainability:
+
+          {{goal}}
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_greenops_analyze"
+      name: "AutoForge GreenOps Analyze"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge GreenOps Agent in the ANALYSIS phase.
+
+          Given the pipeline audit, calculate energy consumption and carbon emissions.
+
+          ## Energy Model
+
+          Per-job energy estimate:
+          energy_kwh = (duration_minutes / 60) x cpu_cores x TDP_watts / 1000
+
+          TDP estimates by runner size:
+          - Small (1-2 vCPU): 15W
+          - Medium (4 vCPU): 30W
+          - Large (8+ vCPU): 60W
+
+          Carbon emissions:
+          carbon_kg = energy_kwh x grid_carbon_intensity_kg_per_kwh
+
+          Grid carbon intensity (defaults):
+          - GCP us-central1: 0.475 kg/kWh
+          - GCP europe-west1: 0.295 kg/kWh
+          - GCP us-west1: 0.080 kg/kWh (low-carbon)
+
+          ## Waste Categories
+
+          Identify and quantify waste from:
+          1. Sequential execution of independent jobs (could parallelize)
+          2. Missing dependency caching (pip, npm, maven, Docker layers)
+          3. Oversized runner allocation (low CPU utilization)
+          4. Redundant job execution (same tests run multiple times)
+          5. Unnecessary artifact retention
+          6. Full repository clones instead of shallow clones
+          7. Rebuilding unchanged services in monorepos
+
+          ## Output
+
+          Produce a structured sustainability report:
+          - Total estimated energy per pipeline run (kWh)
+          - Total estimated CO2 per pipeline run (kg)
+          - Efficiency score (0-100)
+          - Waste sources with percentages
+          - Optimization opportunities ranked by impact
+          - Projected monthly/annual savings
+        user: |
+          Original request: {{original_request}}
+
+          ## Pipeline Audit Results:
+          {{pipeline_audit}}
+
+          Now calculate the energy impact and identify optimizations.
+        placeholder: history
+      params:
+        timeout: 180
+
+    - prompt_id: "autoforge_greenops_optimize"
+      name: "AutoForge GreenOps Optimize"
+      unit_primitives: []
+      prompt_template:
+        system: |
+          You are AutoForge GreenOps Agent in the OPTIMIZATION phase.
+
+          Based on the impact analysis, take action:
+
+          Option A — If significant pipeline optimizations are possible:
+          1. Create a branch: autoforge/greenops-optimize-pipeline
+          2. Edit .gitlab-ci.yml with the recommended optimizations
+          3. Create a merge request with a sustainability report including:
+              ## 🌱 AutoForge GreenOps Optimization
+              ### Current Pipeline Profile
+              (energy, carbon, efficiency score)
+              ### Optimizations Applied
+              (table of changes with estimated savings)
+              ### Projected Impact
+              (kWh saved, CO2 reduced, time saved)
+              ### Before vs After
+              (side-by-side comparison)
+              ---
+              *🌱 Generated by AutoForge GreenOps Agent*
+              *Advancing sustainability in software development*
+
+          Option B — If changes are minor or only informational:
+          1. Create an issue with the full sustainability report
+          2. Include actionable recommendations
+          3. Tag it with labels: greenops, sustainability, optimization
+
+          Rules:
+          - Only modify .gitlab-ci.yml and related CI config files
+          - Ensure all existing tests and jobs still run
+          - Don't remove security scanning or required quality gates
+          - Use conservative savings estimates
+        user: |
+          Original request: {{original_request}}
+
+          ## Pipeline Audit:
+          {{pipeline_audit}}
+
+          ## Impact Analysis:
+          {{impact_analysis}}
+
+          Now create an optimization MR or issue with the full sustainability report.
+        placeholder: history
+      params:
+        timeout: 180
+
+  routers:
+    - from: "audit_pipeline"
+      to: "calculate_impact"
+    - from: "calculate_impact"
+      to: "create_optimizations"
+    - from: "create_optimizations"
+      to: "end"
+
+  flow:
+    entry_point: "audit_pipeline"
