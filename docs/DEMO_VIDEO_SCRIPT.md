@@ -1,56 +1,106 @@
 # Demo Video Script — AutoForge (3 minutes)
 
-## 0:00–0:15 — Hook
-"What if six AI agents could autonomously diagnose, fix, and optimize your entire GitLab workflow — while tracking the carbon footprint of every pipeline?"
+> **Recording tip**: Use screen recording (QuickTime/OBS), speak clearly, keep a steady pace.
+> All URLs below are live and publicly accessible.
 
-Show: AutoForge dashboard overview tab with all 6 agents active.
+---
 
-## 0:15–0:45 — The Problem
-"Every day, developers waste hours on:
-- Debugging CI/CD pipeline failures
-- Triaging security vulnerabilities  
-- Waiting for code reviews
-- And nobody tracks the environmental cost of running thousands of CI pipelines."
+## 0:00–0:15 — Hook (15 sec)
 
-Show: A failing pipeline in GitLab. Red X marks.
+**Say**: "What if AI agents could autonomously diagnose pipeline failures, find security vulnerabilities, and measure your carbon footprint — all running natively inside GitLab?"
 
-## 0:45–1:30 — Demo: SRE Agent Fixes a Pipeline
-"Watch AutoForge in action. A pipeline fails — missing numpy dependency after a cleanup commit."
+**Show**: Open the GitLab project page:
+- https://gitlab.com/gitlab-ai-hackathon/participants/35031168
+- Scroll to show the repo structure: `agents/`, `flows/`, `AGENTS.md`
 
-1. Show: @mention the AutoForge SRE service account on the failing MR
-2. Show: The flow starts (Automate > Sessions shows it running)
-3. Show: Agent reads logs, identifies ModuleNotFoundError
-4. Show: Agent generates 5 hypotheses with confidence scores
-5. Show: Agent creates a fix MR — adds numpy back to requirements.txt
-6. Show: The reasoning tree visualization in the dashboard
+---
 
-## 1:30–2:00 — Demo: GreenOps Sustainability Audit
-"Now let's audit a pipeline's carbon footprint."
+## 0:15–0:40 — The Problem (25 sec)
 
-1. Show: @mention the GreenOps service account on a project
-2. Show: Agent reads .gitlab-ci.yml, analyzes structure
-3. Show: Energy report: X kWh per run, Y kg CO₂, 55/100 efficiency
-4. Show: Agent creates optimization MR with parallelized stages
-5. Show: GreenOps dashboard tab with carbon savings chart
+**Say**: "DevOps teams spend over 40% of their time on reactive work — debugging CI failures, triaging security issues, and nobody tracks the environmental cost of running thousands of pipelines. AutoForge solves all three with specialized AI agents on the GitLab Duo Agent Platform."
 
-## 2:00–2:30 — Architecture & Technical Depth
-"Under the hood, AutoForge uses a cognitive architecture."
+**Show**: Quick scroll through the 6 YAML files:
+- `agents/sre_agent.yml`, `agents/security_agent.yml`, `agents/greenops_agent.yml`
+- `flows/sre_flow.yml`, `flows/security_flow.yml`, `flows/greenops_flow.yml`
 
-Show: Architecture diagram — perceive → reason → plan → act → reflect
+---
 
-"Each agent generates Tree-of-Thought hypotheses with evidence-weighted 
-confidence scores. A DAG orchestrator manages dependencies between agents.
-464 tests ensure reliability."
+## 0:40–1:15 — Demo 1: SRE Agent (35 sec)
 
-Show: Test suite passing. Dashboard reasoning tree.
+**Say**: "First, the SRE Agent. We @mention its service account on a merge request with a pipeline failure."
 
-## 2:30–2:50 — Security Agent Quick Hit
-"The Security Agent scans MRs for vulnerabilities and patches them."
+**Show** (navigate in browser):
+1. Open [MR !6](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/merge_requests/6)
+2. Scroll to the comment showing `@ai-autoforge-sre-pipeline-fix-gitlab-ai-hackathon` mention
+3. Show the "✅ has started" response from the service account
+4. Open [SRE Flow Session #3046329](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046329)
+5. Show the session log — agent perceiving, reasoning, planning, acting
 
-Show: Security flow detecting a lodash CVE, creating a fix MR.
+**Say**: "The agent follows a 5-phase cognitive pipeline — Perceive, Reason with Tree-of-Thought, Plan, Act, Reflect. It generates multiple hypotheses with confidence scores, not just a single answer."
 
-## 2:50–3:00 — Closing
-"AutoForge: six AI agents, three custom flows, built on GitLab Duo Agent Platform.
-Autonomous DevOps that's fast, safe, and sustainable."
+---
 
-Show: Dashboard with all metrics. GitHub repo link.
+## 1:15–1:45 — Demo 2: Security Agent (30 sec)
+
+**Say**: "Next, the Security Agent. We trigger it by @mentioning on an issue."
+
+**Show**:
+1. Open [Issue #16](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/16)
+2. Show the @mention and "✅ has started" response
+3. Open [Security Flow Session #3046331](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046331)
+4. Show session log — scanning, assessing CVSS scores, planning patches
+
+**Say**: "Earlier in Duo Chat, this agent found 12 vulnerabilities in a single scan — each one documented as a tracked issue."
+
+**Show**: Quickly scroll the [Issues list](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues) showing Issues #4–#15
+
+---
+
+## 1:45–2:20 — Demo 3: GreenOps Agent (35 sec)
+
+**Say**: "Finally, our GreenOps Agent — this is what makes AutoForge unique. It measures the actual energy consumption and carbon footprint of your CI/CD pipelines."
+
+**Show**:
+1. Open [Issue #17](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/17)
+2. Show the @mention and "✅ has started" response
+3. Open [GreenOps Flow Session #3046334](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046334)
+4. Show session log — auditing pipeline, calculating energy (TDP × duration × cores), CO₂ emissions
+
+**Say**: "It uses real physics — thermal design power times duration times core count times grid carbon intensity. Not an abstract score, but real kilowatt-hours and kilograms of CO₂."
+
+---
+
+## 2:20–2:45 — Architecture & All Pipelines Succeeded (25 sec)
+
+**Say**: "All three flows run as duo_workflow pipelines on GitLab's infrastructure. Let me show you — all three succeeded."
+
+**Show**: Navigate to [Pipelines page](https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/pipelines) and show:
+- Pipeline #2363023638 (SRE) → ✅ passed
+- Pipeline #2363023377 (Security) → ✅ passed
+- Pipeline #2363023217 (GreenOps) → ✅ passed
+
+**Say**: "The entire system is built with zero external infrastructure. No API keys, no servers. Everything runs natively on GitLab Duo with Anthropic Claude built in."
+
+---
+
+## 2:45–3:00 — Closing (15 sec)
+
+**Say**: "AutoForge — three specialized AI agents, three orchestration flows, six AI Catalog items. Autonomous DevOps that's fast, secure, and sustainable. Built entirely on the GitLab Duo Agent Platform."
+
+**Show**: Return to the project page and show the README.
+
+---
+
+## Key URLs for Recording
+
+| What | URL |
+|------|-----|
+| Project | https://gitlab.com/gitlab-ai-hackathon/participants/35031168 |
+| MR !6 (SRE) | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/merge_requests/6 |
+| Issue #16 (Security) | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/16 |
+| Issue #17 (GreenOps) | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues/17 |
+| SRE Session | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046329 |
+| Security Session | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046331 |
+| GreenOps Session | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/automate/agent-sessions/3046334 |
+| Pipelines | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/pipelines |
+| Issues List | https://gitlab.com/gitlab-ai-hackathon/participants/35031168/-/issues |
