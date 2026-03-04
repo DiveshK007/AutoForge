@@ -10,9 +10,8 @@ Implements:
 - Redis cache: Hot-path reads skip DB round-trips
 """
 
-import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from collections import defaultdict
 
 from models.agents import AgentExperience
@@ -77,7 +76,7 @@ class MemoryStore:
         # ─── PostgreSQL ───
         if not settings.DEMO_MODE:
             try:
-                from db.engine import init_db, get_engine
+                from db.engine import init_db
                 from db import repository
                 await init_db()
                 repository.set_db_available(True)

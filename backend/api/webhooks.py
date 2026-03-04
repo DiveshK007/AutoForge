@@ -9,7 +9,6 @@ to Celery workers. In demo mode, events are processed in-process.
 import hashlib
 import hmac
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 

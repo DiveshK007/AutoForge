@@ -9,7 +9,6 @@ This workflow handles:
 5. Performance / sustainability assessment
 """
 
-from typing import Any, Dict
 
 from models.events import NormalizedEvent, EventType
 

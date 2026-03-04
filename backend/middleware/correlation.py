@@ -6,7 +6,6 @@ responses, and downstream calls for distributed tracing.
 """
 
 import secrets
-from typing import Optional
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint

@@ -13,9 +13,8 @@ Provides:
 import hashlib
 import hmac
 import secrets
-import time
 from datetime import datetime, timezone, timedelta
-from typing import Annotated, Optional
+from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
@@ -82,7 +81,7 @@ def _create_jwt(subject: str, roles: list[str], expires_delta: Optional[timedelt
 def _verify_jwt(token: str) -> Optional[dict]:
     """Verify and decode a JWT token. Returns claims dict or None."""
     try:
-        from jose import jwt as jose_jwt, JWTError, ExpiredSignatureError
+        from jose import jwt as jose_jwt
         claims = jose_jwt.decode(
             token,
             settings.JWT_SECRET,

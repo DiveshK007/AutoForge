@@ -2,7 +2,6 @@
 AutoForge Agent API — Agent status and control endpoints.
 """
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request

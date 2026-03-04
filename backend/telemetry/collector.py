@@ -18,7 +18,7 @@ from collections import defaultdict
 
 from logging_config import get_logger
 from models.agents import AgentAction
-from models.workflows import Workflow, WorkflowStatus, TaskStatus
+from models.workflows import Workflow, WorkflowStatus
 
 log = get_logger("telemetry")
 

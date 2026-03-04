@@ -9,7 +9,7 @@ enterprise ``ToolGateway`` which in turn routes through the typed
 GitLab integration layer.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from tools.tool_gateway import ToolGateway
 

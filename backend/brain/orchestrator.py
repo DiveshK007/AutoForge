@@ -16,17 +16,15 @@ The Command Brain is the AI Engineering Manager that:
 import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
-from uuid import uuid4
 
 from config import settings
 from logging_config import get_logger
-from models.events import NormalizedEvent, EventType
+from models.events import NormalizedEvent
 from models.workflows import (
     Workflow,
     WorkflowStatus,
     AgentTask,
     TaskStatus,
-    TaskPriority,
 )
 from brain.router import AgentRouter
 from brain.state_manager import StateManager

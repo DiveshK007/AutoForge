@@ -8,8 +8,6 @@ Provides:
 - Lightweight text embedding via sentence hashing (no heavy ML model)
 """
 
-import hashlib
-import json
 import logging
 from typing import Any, Dict, List, Optional
 

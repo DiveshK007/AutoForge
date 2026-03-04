@@ -6,14 +6,12 @@ assesses exploit risk, and creates secure MRs.
 Supports DEMO_MODE for deterministic reasoning.
 """
 
-from typing import Any, Dict, List
-from uuid import uuid4
+from typing import Any, Dict
 
 from config import settings
 from agents.base_agent import BaseAgent
 from agents.reasoning_engine import ReasoningEngine
 from models.workflows import AgentTask, Workflow
-from models.agents import ReasoningNode, ReasoningTree
 
 
 SECURITY_SYSTEM_PROMPT = """You are an elite Security Engineer AI operating inside GitLab as part of the AutoForge autonomous engineering organization.

@@ -12,10 +12,8 @@ This is the flagship workflow that demonstrates:
 8. Sustainability analysis
 """
 
-from typing import Any, Dict
 
 from models.events import NormalizedEvent, EventType
-from models.workflows import Workflow, WorkflowStatus
 
 
 class PipelineFailureWorkflow:

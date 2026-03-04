@@ -8,7 +8,7 @@ Supports both online (connected) and offline (SQL-generation) modes.
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool, create_engine
+from sqlalchemy import pool, create_engine
 
 # ─── Import AutoForge models so autogenerate can detect them ───
 import sys

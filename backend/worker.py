@@ -60,7 +60,7 @@ def process_event_task(self, event_data: dict):
     """
     log.info("celery_process_event", event=event_data.get("event_type", "unknown"))
     try:
-        from models.events import NormalizedEvent, EventType
+        from models.events import NormalizedEvent
         from brain.orchestrator import CommandBrain
         from memory.store import MemoryStore
         from telemetry.collector import TelemetryCollector
@@ -138,7 +138,6 @@ def on_task_success_callback(result, task_id: str, workflow_id: str = ""):
     Broadcasts the result via WebSocket so the dashboard gets real-time updates.
     """
     try:
-        import asyncio
         from api.websocket import broadcast_workflow_update
 
         loop = _get_or_create_event_loop()

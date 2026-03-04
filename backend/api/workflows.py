@@ -3,7 +3,6 @@ AutoForge Workflow API — Workflow tracking, management, and demo triggers.
 """
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 

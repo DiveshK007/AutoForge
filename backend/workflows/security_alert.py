@@ -11,7 +11,6 @@ This workflow handles:
 7. Sustainability analysis
 """
 
-from typing import Any, Dict
 
 from models.events import NormalizedEvent, EventType
 

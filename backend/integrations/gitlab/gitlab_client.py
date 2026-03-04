@@ -28,7 +28,7 @@ from integrations.gitlab.retry_handler import (
     RetryExhausted,
     is_retryable_status,
 )
-from integrations.gitlab.models import GitLabAPIResponse, APICallTelemetry
+from integrations.gitlab.models import APICallTelemetry
 
 logger = logging.getLogger("autoforge.integrations.gitlab.client")
 

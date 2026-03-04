@@ -82,7 +82,7 @@ def _format_scenario_explanation(scenario_key: str, tree_data: dict) -> str:
         elif ntype == "perception":
             lines.append(f"\n**2. Perception:** {group[0].get('label', '')}")
         elif ntype == "hypothesis":
-            lines.append(f"\n**3. Hypotheses Generated:**")
+            lines.append("\n**3. Hypotheses Generated:**")
             for j, h in enumerate(group, 1):
                 conf = h.get("confidence", 0)
                 lines.append(f"   {j}. {h.get('label', '')} (confidence: {conf:.0%})")

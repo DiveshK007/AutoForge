@@ -7,10 +7,9 @@ All methods are safe to call when the DB is unavailable (return empty / no-op).
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from sqlalchemy import select, func, desc
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.engine import get_session_factory
 from db.tables import ExperienceRow, SkillRow, WorkflowRow, WorkflowTaskRow, PolicyEventRow

@@ -9,9 +9,8 @@ No network requests are made.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from config import settings
 from integrations.gitlab.models import (
     BranchInfo,
     CommitResult,
@@ -129,7 +128,7 @@ class DemoModeSimulator:
             state=MergeRequestState.OPENED,
             source_branch=source_branch,
             target_branch=target_branch,
-            web_url=f"https://gitlab.com/demo/project/-/merge_requests/42",
+            web_url="https://gitlab.com/demo/project/-/merge_requests/42",
             labels=["autoforge", "automated-fix"],
         )
 

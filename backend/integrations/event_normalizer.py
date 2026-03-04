@@ -2,11 +2,9 @@
 AutoForge Event Normalizer — Converts raw GitLab events to structured format.
 """
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from models.events import GitLabEvent, NormalizedEvent, EventType
-from config import settings
 
 
 class EventNormalizer:

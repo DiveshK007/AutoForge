@@ -6,7 +6,6 @@ suggests optimizations, and tracks carbon efficiency.
 Supports DEMO_MODE.
 """
 
-import math
 from typing import Any, Dict
 from config import settings
 from agents.base_agent import BaseAgent

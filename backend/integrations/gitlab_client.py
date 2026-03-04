@@ -2,7 +2,7 @@
 AutoForge GitLab API Client — Programmatic access to GitLab.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import httpx
 
 from config import settings

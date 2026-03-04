@@ -5,7 +5,6 @@ Provides all data the Next.js dashboard consumes, including
 demo-mode precomputed state for impressive first-load experience.
 """
 
-from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -13,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from demo.engine import (
     DEMO_REASONING_TREES,
     DEMO_ENERGY_ESTIMATES,
-    get_demo_scenario,
 )
 from middleware.auth import AuthContext, get_auth_context
 

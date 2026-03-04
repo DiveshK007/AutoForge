@@ -5,7 +5,7 @@ Create, comment, approve, and inspect merge requests.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from config import settings
 from integrations.gitlab.gitlab_client import GitLabAPIClient

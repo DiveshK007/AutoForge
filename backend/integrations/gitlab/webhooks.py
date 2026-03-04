@@ -5,7 +5,6 @@ Parses incoming GitLab webhook payloads, verifies tokens, and
 produces NormalizedEvent objects ready for the CommandBrain.
 """
 
-import hashlib
 import hmac
 import logging
 from datetime import datetime, timezone
